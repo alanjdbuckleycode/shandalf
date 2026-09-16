@@ -182,8 +182,8 @@
         <div class="key-list">
           <span><kbd>←</kbd><kbd>→</kbd> Move</span>
           <span><kbd>↑</kbd> Jump</span>
-          <span><kbd>A</kbd> Magic</span>
-          <span><kbd>R</kbd> Restart</span>
+          <span><kbd>A</kbd> Attack</span>
+          <span><kbd>S</kbd> Shield</span>
         </div>
         <div class="tip">Land the spell. Keep your distance.</div>
       </div>
@@ -210,6 +210,7 @@
       let projectiles = [];
       let particles = [];
       let round = 1;
+      let gameState = "title";
       let gameOver = false;
       let lastTime = performance.now();
       let botThink = 0;
@@ -278,7 +279,19 @@
 
       function handleKeyDown(event) {
         const key = event.key.toLowerCase();
-        if (["arrowleft", "arrowright", "arrowup", "a", "r"].includes(key)) event.preventDefault();
+        if (["arrowleft", "arrowright", "arrowup", "a", "s", "r", "enter", "escape"].includes(key)) event.preventDefault();
+        if (key === "enter" && gameState === "title") {
+          gameState = "combat";
+          resetRound();
+          return;
+        }
+        if (key === "escape") {
+          gameState = "title";
+          gameOver = false;
+          keys.clear();
+          statusMessage.classList.remove("visible");
+          return;
+        }
         keys.add(key);
         if (key === "r" && gameOver) {
           round += 1;
@@ -295,6 +308,10 @@
 
       function update(delta) {
         const dt = Math.min(delta / 16.67, 2);
+        if (gameState === "title") {
+          updateParticles(dt);
+          return;
+        }
         if (gameOver) {
           updateParticles(dt);
           return;
@@ -443,12 +460,79 @@
       function draw() {
         ctx.fillStyle = COLORS.ink;
         ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+        if (gameState === "title") {
+          drawTitleScreen();
+          drawParticles();
+          return;
+        }
         drawBackdrop();
         drawHud();
         drawFighter(player);
         drawFighter(bot);
         drawProjectiles();
         drawParticles();
+      }
+
+      function drawTitleScreen() {
+        ctx.fillStyle = COLORS.deep;
+        ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+        ctx.fillStyle = COLORS.ink;
+        ctx.fillRect(18, 18, WORLD.width - 36, WORLD.height - 36);
+        ctx.strokeStyle = COLORS.mid;
+        ctx.lineWidth = 4;
+        ctx.strokeRect(30, 30, WORLD.width - 60, WORLD.height - 60);
+
+        ctx.fillStyle = COLORS.deep;
+        for (let y = 48; y < 500; y += 24) ctx.fillRect(48, y, 864, 2);
+        ctx.fillStyle = COLORS.mid;
+        ctx.font = "bold 18px Courier New, monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("POCKET ARENA // SECTOR 08", WORLD.width / 2, 92);
+
+        ctx.fillStyle = COLORS.glow;
+        ctx.font = "bold 44px Courier New, monospace";
+        ctx.fillText("SHANDALF:", WORLD.width / 2, 178);
+        ctx.font = "bold 36px Courier New, monospace";
+        ctx.fillText("HR SHOWDOWN", WORLD.width / 2, 225);
+        ctx.fillStyle = COLORS.mid;
+        ctx.fillRect(290, 247, 380, 5);
+
+        drawTitleFighter(270, 390, 1, COLORS.glow, COLORS.mid);
+        drawTitleFighter(690, 390, -1, COLORS.mid, COLORS.glow);
+
+        ctx.fillStyle = COLORS.glow;
+        ctx.font = "bold 17px Courier New, monospace";
+        ctx.fillText("ARROW KEYS: MOVE/JUMP  |  A: ATTACK  |  S: SHIELD", WORLD.width / 2, 335);
+        if (Math.floor(performance.now() / 450) % 2 === 0) {
+          ctx.fillStyle = COLORS.glow;
+          ctx.font = "bold 22px Courier New, monospace";
+          ctx.fillText("PRESS ENTER TO START", WORLD.width / 2, 475);
+        }
+        ctx.textAlign = "left";
+      }
+
+      function drawTitleFighter(x, y, facing, primary, secondary) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(facing, 1);
+        ctx.fillStyle = secondary;
+        ctx.fillRect(-22, -68, 44, 8);
+        ctx.fillRect(-18, -60, 36, 29);
+        ctx.fillRect(-21, -28, 42, 12);
+        ctx.fillRect(-16, -16, 32, 15);
+        ctx.fillStyle = primary;
+        ctx.fillRect(-13, -52, 26, 8);
+        ctx.fillRect(-14, -1, 10, 27);
+        ctx.fillRect(5, -1, 10, 27);
+        ctx.fillStyle = COLORS.ink;
+        ctx.fillRect(-12, -51, 6, 6);
+        ctx.fillRect(6, -51, 6, 6);
+        ctx.fillRect(-19, 25, 15, 5);
+        ctx.fillRect(4, 25, 15, 5);
+        ctx.fillStyle = primary;
+        ctx.fillRect(27, -62, 5, 62);
+        ctx.fillRect(24, -67, 11, 5);
+        ctx.restore();
       }
 
       function drawBackdrop() {
