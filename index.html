@@ -497,12 +497,12 @@
         ctx.fillStyle = COLORS.mid;
         ctx.fillRect(290, 247, 380, 5);
 
-        drawTitleFighter(270, 390, 1, COLORS.glow, COLORS.mid);
-        drawTitleFighter(690, 390, -1, COLORS.mid, COLORS.glow);
+        drawTitleFighter(270, 410, 1, COLORS.glow, COLORS.mid);
+        drawTitleFighter(690, 410, -1, COLORS.mid, COLORS.glow);
 
         ctx.fillStyle = COLORS.glow;
-        ctx.font = "bold 17px Courier New, monospace";
-        ctx.fillText("ARROW KEYS: MOVE/JUMP  |  A: ATTACK  |  S: SHIELD", WORLD.width / 2, 335);
+        ctx.font = "bold 15px Courier New, monospace";
+        ctx.fillText("ARROW KEYS: MOVE/JUMP  |  A: ATTACK  |  S: SHIELD", WORLD.width / 2, 305);
         if (Math.floor(performance.now() / 450) % 2 === 0) {
           ctx.fillStyle = COLORS.glow;
           ctx.font = "bold 22px Courier New, monospace";
