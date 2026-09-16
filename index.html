@@ -218,16 +218,24 @@
       };
       const WORLD = { width: 960, height: 540, floor: 490 };
       const keys = new Set();
+      const STORAGE_KEYS = {
+        highScoreArr: "shandalf.high_score_arr",
+        maxWinStreak: "shandalf.max_win_streak",
+        lastRival: "shandalf.last_rival"
+      };
+
       let projectiles = [];
       let particles = [];
       let round = 1;
-      let gameState = "STAGE_SELECT";
+      let gameState = "title";
       let gameOver = false;
       let matchWinner = null;
       let playerRoundWins = 0;
       let botRoundWins = 0;
       let arrSecured = 0;
       let winStreak = 0;
+      let highScoreArr = 0;
+      let maxWinStreak = 0;
       let roundTransitionActive = false;
       let roundTransitionTimer = 0;
       let roundBannerTimer = 0;
@@ -251,6 +259,43 @@
         inputLock: false,
         speechTimer: 0
       };
+
+      function readStorageNumber(key, fallback) {
+        try {
+          const raw = window.localStorage.getItem(key);
+          if (raw === null) return fallback;
+          const value = Number(raw);
+          return Number.isFinite(value) ? value : fallback;
+        } catch (error) {
+          return fallback;
+        }
+      }
+
+      function persistProgress() {
+        try {
+          window.localStorage.setItem(STORAGE_KEYS.highScoreArr, String(highScoreArr));
+          window.localStorage.setItem(STORAGE_KEYS.maxWinStreak, String(maxWinStreak));
+          window.localStorage.setItem(STORAGE_KEYS.lastRival, String(selectedOpponentIndex));
+        } catch (error) {
+          // Ignore storage failures in private or restricted browsing modes.
+        }
+      }
+
+      function loadProgress() {
+        highScoreArr = readStorageNumber(STORAGE_KEYS.highScoreArr, 0);
+        maxWinStreak = readStorageNumber(STORAGE_KEYS.maxWinStreak, 0);
+        selectedOpponentIndex = Math.min(
+          opponentOptions.length - 1,
+          Math.max(0, readStorageNumber(STORAGE_KEYS.lastRival, 0))
+        );
+      }
+
+      function clearProgress() {
+        highScoreArr = 0;
+        maxWinStreak = 0;
+        selectedOpponentIndex = 0;
+        persistProgress();
+      }
 
       function createSpriteImage(svg) {
         const image = new Image();
@@ -438,6 +483,13 @@
         }
         if (gameState === "title" && (key === "arrowleft" || key === "arrowright")) {
           selectedOpponentIndex = (selectedOpponentIndex + (key === "arrowright" ? 1 : -1) + opponentOptions.length) % opponentOptions.length;
+          persistProgress();
+          return;
+        }
+        if (gameState === "title" && key === "c") {
+          clearProgress();
+          statusMessage.textContent = "HIGH SCORE RESET";
+          statusMessage.classList.add("visible");
           return;
         }
         if (key === "enter" && gameState === "title") {
@@ -777,7 +829,13 @@
         finisherState = "FREEZE";
         finisherTimer = 0;
         finisherWinner = winner;
-        roundTransitionActive = false;
+        if (winner === "player") {
+          playerRoundWins += 1;
+        } else {
+          botRoundWins += 1;
+        }
+        roundTransitionActive = true;
+        roundTransitionTimer = 90;
         koBannerTimer = 0;
         screenShake = 9;
         const defeated = winner === "player" ? bot : player;
@@ -801,9 +859,11 @@
       }
 
       function finishFinisher() {
-        gameOver = true;
-        statusMessage.innerHTML = "<strong>K.O.!</strong><br><small>Press R to Rematch</small>";
-        statusMessage.classList.add("visible");
+        if (playerRoundWins >= 2 || botRoundWins >= 2) {
+          finishMatch();
+          return;
+        }
+        finisherState = "COMPLETE";
       }
 
       function updateRoundTransition(dt) {
@@ -837,6 +897,9 @@
           winStreak = 0;
           statusMessage.innerHTML = `${bot.name} WINS THE MATCH<br><small>PRESS ENTER: NEXT COMPETITOR | PRESS ESC: TITLE SCREEN</small>`;
         }
+        highScoreArr = Math.max(highScoreArr, arrSecured);
+        maxWinStreak = Math.max(maxWinStreak, winStreak);
+        persistProgress();
         statusMessage.classList.add("visible");
       }
 
@@ -1344,9 +1407,9 @@
 
         ctx.fillStyle = COLORS.glow;
         ctx.font = "bold 44px Courier New, monospace";
-        ctx.fillText("SHANDALF:", WORLD.width / 2, 178);
+        ctx.fillText("SHANDALF", WORLD.width / 2, 178);
         ctx.font = "bold 36px Courier New, monospace";
-        ctx.fillText("HR SHOWDOWN", WORLD.width / 2, 225);
+        ctx.fillText("SHOWDOWN", WORLD.width / 2, 225);
         ctx.fillStyle = COLORS.mid;
         ctx.fillRect(290, 247, 380, 5);
 
@@ -1376,16 +1439,18 @@
         ctx.fillText("LEFT / RIGHT TO CHOOSE", WORLD.width / 2, 450);
 
         ctx.fillStyle = COLORS.glow;
-        ctx.font = "bold 13px Courier New, monospace";
-        ctx.fillText("ARROW KEYS: MOVE/JUMP  |  A: MAGIC  |  Z: PUNCH  X: KICK  |  S: SHIELD", WORLD.width / 2, 474);
-        ctx.fillStyle = COLORS.green;
-        ctx.font = "bold 10px Courier New, monospace";
-        ctx.fillText("DOWN + A: YOU SHALL NOT PASS!  (UNDER 30% HP)", WORLD.width / 2, 492);
+        ctx.font = "bold 12px Courier New, monospace";
+        ctx.fillText(`HIGH SCORE: ${formatMoney(highScoreArr)}`, WORLD.width / 2 - 120, 530);
+        ctx.fillStyle = COLORS.mid;
+        ctx.fillText(`BEST STREAK: ${maxWinStreak}`, WORLD.width / 2 + 122, 530);
         if (Math.floor(performance.now() / 450) % 2 === 0) {
           ctx.fillStyle = COLORS.glow;
-          ctx.font = "bold 18px Courier New, monospace";
-          ctx.fillText("PRESS ENTER TO START", WORLD.width / 2, 510);
+          ctx.font = "bold 20px Courier New, monospace";
+          ctx.fillText("PRESS ENTER TO START", WORLD.width / 2, 502);
         }
+        ctx.fillStyle = COLORS.white;
+        ctx.font = "bold 10px Courier New, monospace";
+        ctx.fillText("C: CLEAR SAVE", WORLD.width / 2, 548);
         ctx.textAlign = "left";
       }
 
@@ -1710,10 +1775,12 @@
       function drawScoreTracker() {
         ctx.fillStyle = COLORS.glow;
         ctx.font = "bold 13px Courier New, monospace";
-        drawClippedLabel(`ARR SECURED: ${formatMoney(arrSecured)}`, 405, 19, 215, "center", "bold 13px Courier New, monospace");
+        drawClippedLabel(`ARR SECURED: ${formatMoney(arrSecured)}`, 405, 19, 210, "center", "bold 13px Courier New, monospace");
+        drawClippedLabel(`HIGH: ${formatMoney(highScoreArr)}`, 565, 19, 150, "center", "bold 10px Courier New, monospace");
         ctx.fillStyle = COLORS.mid;
         ctx.font = "bold 10px Courier New, monospace";
-        drawClippedLabel(`WIN STREAK: ${winStreak}`, 555, 19, 175, "center", "bold 10px Courier New, monospace");
+        drawClippedLabel(`WIN STREAK: ${winStreak}`, 390, 34, 170, "center", "bold 10px Courier New, monospace");
+        drawClippedLabel(`BEST: ${maxWinStreak}`, 570, 34, 130, "center", "bold 10px Courier New, monospace");
       }
 
       function formatMoney(amount) {
@@ -1957,6 +2024,7 @@
         requestAnimationFrame(loop);
       }
 
+      loadProgress();
       resetRound();
       requestAnimationFrame(loop);
     })();
