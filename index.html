@@ -167,7 +167,6 @@
   <main>
     <header class="masthead">
       <div>
-        <p class="eyebrow">Pocket Arena // Sector 08</p>
         <h1>Shandalf Showdown</h1>
       </div>
       <div class="round-label">Round <span id="roundNumber">01</span> // Live</div>
@@ -1400,10 +1399,7 @@
 
         ctx.fillStyle = COLORS.deep;
         for (let y = 48; y < 500; y += 24) ctx.fillRect(48, y, 864, 2);
-        ctx.fillStyle = COLORS.mid;
-        ctx.font = "bold 18px Courier New, monospace";
         ctx.textAlign = "center";
-        ctx.fillText("POCKET ARENA // SECTOR 08", WORLD.width / 2, 92);
 
         ctx.fillStyle = COLORS.glow;
         ctx.font = "bold 44px Courier New, monospace";
@@ -1431,7 +1427,8 @@
         ctx.fillText(">", 638, 370);
         ctx.font = "bold 16px Courier New, monospace";
         ctx.fillText(opponent.name, WORLD.width / 2, 326);
-        drawTitleOpponent(opponent, WORLD.width / 2, 390);
+        const opponentIconY = ["HIBOB CYBORG", "FACTORIAL MECH"].includes(opponent.name) ? 390 : 400;
+        drawTitleOpponent(opponent, WORLD.width / 2, opponentIconY);
         ctx.fillStyle = opponent.color;
         ctx.fillRect(450, 420, 60, 6);
         ctx.fillStyle = COLORS.mid;
@@ -1750,10 +1747,6 @@
         drawRoundMarkers(58, playerRoundWins, COLORS.glow);
         drawRoundMarkers(592, botRoundWins, bot.color);
         drawScoreTracker();
-        ctx.fillStyle = COLORS.mid;
-        ctx.font = "bold 16px Courier New, monospace";
-        ctx.textAlign = "center";
-        ctx.fillText("VS", WORLD.width / 2, 104);
         ctx.textAlign = "left";
       }
 
