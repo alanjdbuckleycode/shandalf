@@ -217,11 +217,13 @@
       let projectiles = [];
       let particles = [];
       let round = 1;
-      let gameState = "title";
+      let gameState = "STAGE_SELECT";
       let gameOver = false;
       let lastTime = performance.now();
       let botThink = 0;
       let selectedOpponentIndex = 0;
+      let selectedStageIndex = 0;
+      let currentStageId = "server_room";
       let chosenOpponent = null;
       let screenShake = 0;
       const superMove = {
@@ -261,6 +263,33 @@
           speed: 1.1,
           health: 100,
           sprite: createSpriteImage(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 90" shape-rendering="crispEdges"><path fill="#FF77A8" d="M20 2h40v8h8v12h6v30H60v28H48v8H32v-8H20V52H6V22h6V10h8z"/><path fill="#1D2B53" d="M14 22h52v30H14zM20 58h40v22H20z"/><path fill="#FF004D" d="M24 30h32v8H24zM31 60h18v12H31z"/><path fill="#1D2B53" d="M29 12h8v8h-8zM43 12h8v8h-8zM6 36h12v10H6zM62 36h12v10H62z"/></svg>`)
+        }
+      ];
+
+      const stages = [
+        {
+          id: "server_room",
+          name: "SERVER ROOM DUNGEON",
+          tagline: "The prod server has a wizard problem.",
+          accent: COLORS.green
+        },
+        {
+          id: "office",
+          name: "OPEN-PLAN OFFICE",
+          tagline: "Mordor is booked until Q4.",
+          accent: COLORS.glow
+        },
+        {
+          id: "cloud",
+          name: "CLOUD INFRASTRUCTURE",
+          tagline: "There is no cloud, only someone else's dungeon.",
+          accent: COLORS.mid
+        },
+        {
+          id: "slack",
+          name: "SLACK // #GENERAL",
+          tagline: "Who broke build? Asking for a channel.",
+          accent: COLORS.purple
         }
       ];
 
@@ -344,7 +373,17 @@
 
       function handleKeyDown(event) {
         const key = event.key.toLowerCase();
-        if (["arrowleft", "arrowright", "arrowup", "arrowdown", "a", "s", "r", "enter", "escape"].includes(key)) event.preventDefault();
+        if (["arrowleft", "arrowright", "arrowup", "arrowdown", "a", "d", "s", "r", "enter", " ", "escape"].includes(key)) event.preventDefault();
+        if (gameState === "STAGE_SELECT" && ["arrowleft", "arrowright", "a", "d"].includes(key)) {
+          const movesRight = key === "arrowright" || key === "d";
+          selectedStageIndex = (selectedStageIndex + (movesRight ? 1 : -1) + stages.length) % stages.length;
+          return;
+        }
+        if (gameState === "STAGE_SELECT" && (key === "enter" || key === " ")) {
+          currentStageId = stages[selectedStageIndex].id;
+          gameState = "title";
+          return;
+        }
         if (gameState === "title" && (key === "arrowleft" || key === "arrowright")) {
           selectedOpponentIndex = (selectedOpponentIndex + (key === "arrowright" ? 1 : -1) + opponentOptions.length) % opponentOptions.length;
           return;
@@ -356,7 +395,7 @@
           return;
         }
         if (key === "escape") {
-          gameState = "title";
+          gameState = "STAGE_SELECT";
           gameOver = false;
           keys.clear();
           statusMessage.classList.remove("visible");
@@ -365,6 +404,7 @@
         keys.add(key);
         if (key === "r" && gameOver) {
           round += 1;
+          gameState = "STAGE_SELECT";
           resetRound();
         }
       }
@@ -378,6 +418,10 @@
 
       function update(delta) {
         const dt = Math.min(delta / 16.67, 2);
+        if (gameState === "STAGE_SELECT") {
+          updateParticles(dt);
+          return;
+        }
         if (gameState === "title") {
           updateParticles(dt);
           return;
@@ -593,6 +637,11 @@
       function draw() {
         ctx.fillStyle = COLORS.ink;
         ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+        if (gameState === "STAGE_SELECT") {
+          drawStageSelectScreen();
+          drawParticles();
+          return;
+        }
         if (gameState === "title") {
           drawTitleScreen();
           drawParticles();
@@ -602,7 +651,7 @@
         if (screenShake > 0) {
           ctx.translate(Math.round((Math.random() - 0.5) * screenShake * 2), Math.round((Math.random() - 0.5) * screenShake * 2));
         }
-        drawBackdrop();
+        drawBackdrop(currentStageId);
         drawHud();
         drawFighter(player);
         drawFighter(bot);
@@ -677,6 +726,111 @@
 
         ctx.textAlign = "left";
         ctx.restore();
+      }
+
+      function drawStageSelectScreen() {
+        const stage = stages[selectedStageIndex];
+        ctx.fillStyle = COLORS.deep;
+        ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+        ctx.fillStyle = COLORS.ink;
+        ctx.fillRect(18, 18, WORLD.width - 36, WORLD.height - 36);
+        ctx.strokeStyle = COLORS.mid;
+        ctx.lineWidth = 4;
+        ctx.strokeRect(30, 30, WORLD.width - 60, WORLD.height - 60);
+        ctx.fillStyle = COLORS.deep;
+        for (let y = 52; y < 500; y += 24) ctx.fillRect(48, y, 864, 2);
+
+        ctx.textAlign = "center";
+        ctx.fillStyle = COLORS.glow;
+        ctx.font = "bold 34px Courier New, monospace";
+        ctx.fillText("SELECT YOUR ARENA", WORLD.width / 2, 105);
+        ctx.fillStyle = COLORS.white;
+        ctx.font = "bold 13px Courier New, monospace";
+        ctx.fillText("FOUR STAGES. ZERO SENSIBLE WORKFLOWS.", WORLD.width / 2, 133);
+
+        ctx.fillStyle = COLORS.black;
+        ctx.fillRect(284, 158, 392, 252);
+        ctx.strokeStyle = stage.accent;
+        ctx.lineWidth = 4;
+        ctx.strokeRect(284, 158, 392, 252);
+        drawStagePreview(stage.id, 314, 182, 332, 146);
+        ctx.fillStyle = stage.accent;
+        ctx.font = "bold 17px Courier New, monospace";
+        ctx.fillText(stage.name, WORLD.width / 2, 354);
+        ctx.fillStyle = COLORS.white;
+        ctx.font = "11px Courier New, monospace";
+        ctx.fillText(stage.tagline, WORLD.width / 2, 375);
+        ctx.fillStyle = stage.accent;
+        ctx.font = "bold 24px Courier New, monospace";
+        ctx.fillText("<", 315, 255);
+        ctx.fillText(">", 645, 255);
+        ctx.fillStyle = COLORS.mid;
+        ctx.font = "10px Courier New, monospace";
+        ctx.fillText(`${selectedStageIndex + 1} / ${stages.length}    LEFT / RIGHT OR A / D`, WORLD.width / 2, 395);
+
+        ctx.fillStyle = COLORS.glow;
+        ctx.font = "bold 16px Courier New, monospace";
+        ctx.fillText("ENTER / SPACE: SELECT STAGE", WORLD.width / 2, 457);
+        ctx.fillStyle = COLORS.mid;
+        ctx.font = "11px Courier New, monospace";
+        ctx.fillText("THEN CHOOSE YOUR RIVAL", WORLD.width / 2, 480);
+        ctx.textAlign = "left";
+      }
+
+      function drawStagePreview(stageId, x, y, width, height) {
+        ctx.fillStyle = COLORS.ink;
+        ctx.fillRect(x, y, width, height);
+        if (stageId === "server_room") {
+          ctx.fillStyle = COLORS.black;
+          ctx.fillRect(x, y + 55, width, height - 55);
+          for (let rack = x + 22; rack < x + width - 20; rack += 76) {
+            ctx.fillStyle = COLORS.deep;
+            ctx.fillRect(rack, y + 25, 52, 105);
+            ctx.fillStyle = COLORS.mid;
+            ctx.fillRect(rack + 7, y + 38, 38, 5);
+            ctx.fillStyle = COLORS.glow;
+            ctx.fillRect(rack + 9, y + 55, 6, 6);
+            ctx.fillRect(rack + 21, y + 55, 6, 6);
+          }
+          ctx.fillStyle = COLORS.green;
+          ctx.fillRect(x + 143, y + 12, 16, 16);
+        } else if (stageId === "office") {
+          ctx.fillStyle = COLORS.white;
+          ctx.fillRect(x + 28, y + 20, 120, 58);
+          ctx.fillRect(x + 184, y + 20, 120, 58);
+          ctx.fillStyle = COLORS.mid;
+          ctx.fillRect(x + 40, y + 92, 105, 10);
+          ctx.fillRect(x + 188, y + 92, 105, 10);
+          ctx.fillStyle = COLORS.deep;
+          ctx.fillRect(x + 70, y + 102, 14, 25);
+          ctx.fillRect(x + 246, y + 102, 14, 25);
+          ctx.fillStyle = COLORS.glow;
+          ctx.fillRect(x + 48, y + 43, 68, 5);
+          ctx.fillRect(x + 204, y + 43, 68, 5);
+        } else if (stageId === "cloud") {
+          ctx.fillStyle = COLORS.white;
+          ctx.fillRect(x + 45, y + 42, 90, 24);
+          ctx.fillRect(x + 75, y + 27, 50, 39);
+          ctx.fillRect(x + 210, y + 58, 86, 22);
+          ctx.fillRect(x + 235, y + 42, 45, 38);
+          ctx.fillStyle = COLORS.deep;
+          ctx.fillRect(x + 88, y + 80, 5, 55);
+          ctx.fillRect(x + 252, y + 80, 5, 55);
+          ctx.fillStyle = COLORS.glow;
+          ctx.fillRect(x + 18, y + 115, 92, 6);
+          ctx.fillRect(x + 222, y + 115, 92, 6);
+        } else {
+          ctx.fillStyle = COLORS.deep;
+          ctx.fillRect(x, y, width, 20);
+          ctx.fillRect(x, y + 126, width, 20);
+          ctx.fillStyle = COLORS.white;
+          ctx.fillRect(x + 24, y + 38, 190, 12);
+          ctx.fillRect(x + 24, y + 68, 235, 12);
+          ctx.fillStyle = COLORS.mid;
+          ctx.fillRect(x + 24, y + 98, 260, 8);
+          ctx.fillStyle = COLORS.glow;
+          ctx.fillRect(x + 292, y + 38, 18, 18);
+        }
       }
 
       function drawTitleScreen() {
@@ -774,47 +928,185 @@
         drawTitleFighter(x, y, 1, opponent.color, opponent.accent);
       }
 
-      function drawBackdrop() {
+      function drawBackdrop(stageId) {
+        if (stageId === "server_room") drawServerRoom();
+        else if (stageId === "office") drawOffice();
+        else if (stageId === "cloud") drawCloudInfrastructure();
+        else drawSlackChannel();
+        drawStageFloor(stageId);
+      }
+
+      function drawServerRoom() {
         ctx.fillStyle = COLORS.ink;
         ctx.fillRect(0, 0, WORLD.width, WORLD.floor);
-
-        // Layered skyline blocks keep the arena bright without losing its depth.
         ctx.fillStyle = COLORS.black;
-        ctx.fillRect(0, 270, WORLD.width, WORLD.floor - 270);
-        ctx.fillStyle = COLORS.deep;
-        for (let x = 0; x < WORLD.width; x += 96) {
-          const height = 55 + ((x / 96) % 4) * 18;
-          ctx.fillRect(x, WORLD.floor - height, 72, height);
-          ctx.fillRect(x + 12, WORLD.floor - height - 10, 48, 10);
-        }
-        ctx.fillStyle = COLORS.purple;
-        for (let x = 18; x < WORLD.width; x += 48) {
-          const height = 25 + ((x / 48) % 3) * 12;
-          ctx.fillRect(x, WORLD.floor - height, 24, height);
-        }
-        ctx.fillStyle = COLORS.glow;
-        for (let x = 12; x < WORLD.width; x += 48) {
-          for (let y = WORLD.floor - 76; y < WORLD.floor - 8; y += 17) {
-            if ((x + y) % 3 !== 0) ctx.fillRect(x, y, 6, 5);
-          }
-        }
+        ctx.fillRect(0, 120, WORLD.width, WORLD.floor - 120);
         ctx.fillStyle = COLORS.mid;
-        ctx.fillRect(0, 244, WORLD.width, 4);
-        ctx.fillRect(62, 192, 5, 52);
-        ctx.fillRect(893, 192, 5, 52);
-        ctx.fillRect(48, 184, 33, 8);
-        ctx.fillRect(879, 184, 33, 8);
+        ctx.fillRect(0, 116, WORLD.width, 4);
+        for (let x = 80; x < WORLD.width - 70; x += 155) {
+          ctx.fillStyle = COLORS.deep;
+          ctx.fillRect(x, 175, 105, 265 - 175);
+          ctx.fillStyle = COLORS.blueDark;
+          ctx.fillRect(x + 10, 190, 85, 232);
+          ctx.fillStyle = COLORS.mid;
+          for (let y = 205; y < 410; y += 30) ctx.fillRect(x + 18, y, 70, 4);
+          ctx.fillStyle = COLORS.glow;
+          for (let y = 217; y < 410; y += 30) ctx.fillRect(x + 20, y, 6, 6);
+          ctx.fillStyle = COLORS.green;
+          for (let y = 217; y < 410; y += 60) ctx.fillRect(x + 79, y, 6, 6);
+        }
+        ctx.fillStyle = COLORS.white;
+        ctx.font = "bold 11px Courier New, monospace";
+        ctx.fillText("PROD SERVER", 118, 166);
+        ctx.fillStyle = COLORS.deep;
+        ctx.fillRect(118, 152, 114, 4);
+        ctx.fillStyle = COLORS.green;
+        ctx.fillRect(166, 128, 18, 18);
+        ctx.fillRect(160, 134, 30, 6);
+        ctx.fillStyle = COLORS.glow;
+        ctx.fillRect(258, 390, 245, 5);
+        ctx.fillRect(370, 395, 5, 45);
+        ctx.fillStyle = COLORS.white;
+        ctx.font = "9px Courier New, monospace";
+        ctx.fillText("Admin123", 184, 205);
+        ctx.fillStyle = COLORS.glow;
+        ctx.fillRect(178, 196, 65, 20);
+      }
 
+      function drawOffice() {
+        ctx.fillStyle = COLORS.ink;
+        ctx.fillRect(0, 0, WORLD.width, WORLD.floor);
+        ctx.fillStyle = COLORS.deep;
+        ctx.fillRect(0, 126, WORLD.width, 8);
+        ctx.fillRect(110, 134, 8, 200);
+        ctx.fillRect(510, 134, 8, 200);
+        ctx.fillRect(840, 134, 8, 200);
+        ctx.fillStyle = COLORS.white;
+        ctx.fillRect(150, 158, 250, 112);
+        ctx.fillRect(570, 158, 210, 112);
+        ctx.fillStyle = COLORS.mid;
+        ctx.fillRect(150, 158, 250, 5);
+        ctx.fillRect(570, 158, 210, 5);
+        ctx.fillStyle = COLORS.ink;
+        ctx.font = "bold 13px Courier New, monospace";
+        ctx.fillText("E = mc²", 184, 205);
+        ctx.fillText("Q3 OKRs", 184, 238);
+        ctx.fillStyle = COLORS.glow;
+        ctx.fillRect(290, 214, 70, 5);
+        ctx.fillRect(290, 232, 45, 5);
+        ctx.fillStyle = COLORS.deep;
+        ctx.fillRect(592, 185, 165, 12);
+        ctx.fillRect(592, 218, 130, 12);
+        ctx.fillStyle = COLORS.mid;
+        for (let x = 80; x < WORLD.width - 80; x += 190) {
+          ctx.fillRect(x, 322, 120, 12);
+          ctx.fillRect(x + 15, 334, 7, 35);
+          ctx.fillRect(x + 98, 334, 7, 35);
+        }
+        ctx.fillStyle = COLORS.deep;
+        ctx.fillRect(425, 360, 58, 40);
+        ctx.fillRect(710, 360, 58, 40);
+        ctx.fillStyle = COLORS.white;
+        ctx.fillRect(432, 350, 44, 20);
+        ctx.fillRect(717, 350, 44, 20);
+        ctx.fillStyle = COLORS.glow;
+        ctx.font = "10px Courier New, monospace";
+        ctx.fillText("Mordor (Booked)", 808, 292);
+        ctx.fillStyle = COLORS.mid;
+        ctx.fillRect(800, 170, 130, 115);
+        ctx.fillStyle = COLORS.ink;
+        ctx.fillRect(808, 178, 114, 99);
+      }
+
+      function drawCloudInfrastructure() {
+        ctx.fillStyle = COLORS.ink;
+        ctx.fillRect(0, 0, WORLD.width, WORLD.floor);
+        ctx.fillStyle = COLORS.mid;
+        ctx.fillRect(0, 110, WORLD.width, 4);
+        drawPixelCloud(150, 160, 150, 44);
+        drawPixelCloud(620, 130, 185, 52);
+        drawPixelCloud(370, 260, 115, 35);
+        ctx.fillStyle = COLORS.deep;
+        ctx.fillRect(194, 200, 6, 220);
+        ctx.fillRect(690, 186, 6, 234);
+        ctx.fillRect(420, 294, 6, 126);
+        ctx.fillStyle = COLORS.glow;
+        ctx.fillRect(188, 225, 18, 5);
+        ctx.fillRect(684, 214, 18, 5);
+        ctx.fillRect(414, 318, 18, 5);
+        ctx.fillStyle = COLORS.white;
+        ctx.font = "bold 11px Courier New, monospace";
+        ctx.fillText("AWS Region: US-East-Wizard", 34, 86);
+        ctx.fillStyle = COLORS.glow;
+        ctx.fillRect(30, 94, 255, 5);
+        ctx.fillStyle = COLORS.deep;
+        ctx.fillRect(750, 300, 8, 120);
+        ctx.fillRect(730, 300, 48, 28);
+        ctx.fillStyle = COLORS.white;
+        ctx.font = "9px Courier New, monospace";
+        ctx.fillText("CLOUD", 738, 318);
+      }
+
+      function drawPixelCloud(x, y, width, height) {
+        ctx.fillStyle = COLORS.white;
+        ctx.fillRect(x, y + height / 3, width, height * 0.66);
+        ctx.fillRect(x + width * 0.18, y, width * 0.38, height);
+        ctx.fillRect(x + width * 0.5, y + height * 0.18, width * 0.32, height * 0.82);
+      }
+
+      function drawSlackChannel() {
+        ctx.fillStyle = COLORS.black;
+        ctx.fillRect(0, 0, WORLD.width, WORLD.floor);
+        ctx.fillStyle = COLORS.deep;
+        ctx.fillRect(0, 0, WORLD.width, 48);
+        ctx.fillStyle = COLORS.mid;
+        ctx.fillRect(0, 48, 190, WORLD.floor - 48);
+        ctx.fillStyle = COLORS.ink;
+        ctx.fillRect(18, 72, 150, 32);
+        ctx.fillRect(18, 122, 150, 32);
+        ctx.fillStyle = COLORS.white;
+        ctx.font = "bold 13px Courier New, monospace";
+        ctx.fillText("#general", 32, 94);
+        ctx.fillStyle = COLORS.mid;
+        ctx.font = "10px Courier New, monospace";
+        ctx.fillText("09:41  @channel:", 230, 112);
+        ctx.fillText("10:02  @gandalf:", 230, 205);
+        ctx.fillText("10:03  @bot:", 230, 298);
+        ctx.fillStyle = COLORS.white;
+        ctx.font = "bold 15px Courier New, monospace";
+        ctx.fillText("Who broke build?", 230, 140);
+        ctx.fillText("I shall investigate.", 230, 233);
+        ctx.fillText("It was probably DNS.", 230, 326);
+        ctx.fillStyle = COLORS.purple;
+        ctx.fillRect(220, 160, 650, 4);
+        ctx.fillRect(220, 253, 650, 4);
+        ctx.fillStyle = COLORS.glow;
+        ctx.fillRect(820, 76, 82, 12);
+        ctx.fillStyle = COLORS.green;
+        ctx.fillRect(830, 79, 56, 6);
+      }
+
+      function drawStageFloor(stageId) {
         ctx.fillStyle = COLORS.deep;
         ctx.fillRect(0, WORLD.floor, WORLD.width, WORLD.height - WORLD.floor);
         ctx.fillStyle = COLORS.glow;
         ctx.fillRect(0, WORLD.floor, WORLD.width, 4);
-        ctx.fillStyle = COLORS.mid;
-        for (let x = 0; x < WORLD.width; x += 48) ctx.fillRect(x, WORLD.floor + 25, 3, 52);
-        for (let y = WORLD.floor + 25; y < WORLD.height; y += 26) ctx.fillRect(0, y, WORLD.width, 3);
-        ctx.fillStyle = COLORS.purple;
-        ctx.fillRect(0, WORLD.floor + 8, WORLD.width, 8);
-
+        if (stageId === "slack") {
+          ctx.fillStyle = COLORS.black;
+          ctx.fillRect(270, WORLD.floor + 18, 420, 38);
+          ctx.strokeStyle = COLORS.mid;
+          ctx.lineWidth = 3;
+          ctx.strokeRect(270, WORLD.floor + 18, 420, 38);
+          ctx.fillStyle = COLORS.white;
+          ctx.font = "bold 17px Courier New, monospace";
+          ctx.fillText("[████████░░] 80%", 300, WORLD.floor + 44);
+        } else {
+          ctx.fillStyle = COLORS.mid;
+          for (let x = 0; x < WORLD.width; x += 48) ctx.fillRect(x, WORLD.floor + 25, 3, 52);
+          for (let y = WORLD.floor + 25; y < WORLD.height; y += 26) ctx.fillRect(0, y, WORLD.width, 3);
+          ctx.fillStyle = COLORS.purple;
+          ctx.fillRect(0, WORLD.floor + 8, WORLD.width, 8);
+        }
         ctx.fillStyle = COLORS.white;
         ctx.font = "10px Courier New, monospace";
         ctx.fillText("ARC-08", 20, 32);
