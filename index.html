@@ -226,7 +226,7 @@
       let projectiles = [];
       let particles = [];
       let round = 1;
-      let gameState = "title";
+      let gameState = "STAGE_SELECT";
       let gameOver = false;
       let matchWinner = null;
       let playerRoundWins = 0;
@@ -499,7 +499,7 @@
           if (matchWinner === "player") {
             selectedOpponentIndex = (selectedOpponentIndex + 1) % opponentOptions.length;
           }
-          gameState = "title";
+          gameState = "STAGE_SELECT";
           gameOver = false;
           statusMessage.classList.remove("visible");
           return;
