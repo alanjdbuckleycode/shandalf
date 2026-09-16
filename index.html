@@ -168,7 +168,7 @@
     <header class="masthead">
       <div>
         <p class="eyebrow">Pocket Arena // Sector 08</p>
-        <h1>Shandalf <span aria-hidden="true">vs</span> Rippling Bot</h1>
+        <h1>Shandalf Showdown</h1>
       </div>
       <div class="round-label">Round <span id="roundNumber">01</span> // Live</div>
     </header>
@@ -219,18 +219,30 @@
       let round = 1;
       let gameState = "STAGE_SELECT";
       let gameOver = false;
+      let matchWinner = null;
+      let playerRoundWins = 0;
+      let botRoundWins = 0;
+      let arrSecured = 0;
+      let winStreak = 0;
+      let roundTransitionActive = false;
+      let roundTransitionTimer = 0;
+      let roundBannerTimer = 0;
+      let koBannerTimer = 0;
       let lastTime = performance.now();
       let botThink = 0;
       let selectedOpponentIndex = 0;
       let selectedStageIndex = 0;
       let currentStageId = "server_room";
       let chosenOpponent = null;
+      let audioContext = null;
+      let availableVoices = [];
       let screenShake = 0;
       const superMove = {
         active: false,
         timer: 0,
         damageApplied: false,
-        inputLock: false
+        inputLock: false,
+        speechTimer: 0
       };
 
       function createSpriteImage(svg) {
@@ -363,12 +375,28 @@
         superMove.timer = 0;
         superMove.damageApplied = false;
         superMove.inputLock = false;
+        superMove.speechTimer = 0;
         screenShake = 0;
+        roundTransitionActive = false;
+        roundTransitionTimer = 0;
+        roundBannerTimer = 120;
+        koBannerTimer = 0;
         projectiles = [];
         particles = [];
         gameOver = false;
         statusMessage.classList.remove("visible");
         roundNumber.textContent = String(round).padStart(2, "0");
+      }
+
+      function beginMatch() {
+        playerRoundWins = 0;
+        botRoundWins = 0;
+        round = 1;
+        matchWinner = null;
+        configureOpponent(opponentOptions[selectedOpponentIndex]);
+        gameState = "combat";
+        resetRound();
+        announceFight();
       }
 
       function handleKeyDown(event) {
@@ -380,6 +408,7 @@
           return;
         }
         if (gameState === "STAGE_SELECT" && (key === "enter" || key === " ")) {
+          unlockAudio();
           currentStageId = stages[selectedStageIndex].id;
           gameState = "title";
           return;
@@ -389,9 +418,16 @@
           return;
         }
         if (key === "enter" && gameState === "title") {
-          configureOpponent(opponentOptions[selectedOpponentIndex]);
-          gameState = "combat";
-          resetRound();
+          beginMatch();
+          return;
+        }
+        if (key === "enter" && gameOver) {
+          if (matchWinner === "player") {
+            selectedOpponentIndex = (selectedOpponentIndex + 1) % opponentOptions.length;
+          }
+          gameState = "title";
+          gameOver = false;
+          statusMessage.classList.remove("visible");
           return;
         }
         if (key === "escape") {
@@ -401,11 +437,12 @@
           statusMessage.classList.remove("visible");
           return;
         }
+        if (key === "s" && gameState === "combat") playShieldSound();
         keys.add(key);
         if (key === "r" && gameOver) {
-          round += 1;
           gameState = "STAGE_SELECT";
-          resetRound();
+          gameOver = false;
+          statusMessage.classList.remove("visible");
         }
       }
 
@@ -415,9 +452,156 @@
 
       window.addEventListener("keydown", handleKeyDown);
       window.addEventListener("keyup", handleKeyUp);
+      canvas.addEventListener("pointerdown", unlockAudio);
+
+      function unlockAudio() {
+        if (!("AudioContext" in window || "webkitAudioContext" in window)) return null;
+        if (!audioContext) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          audioContext = new AudioContextClass();
+        }
+        if (audioContext.state === "suspended") audioContext.resume();
+        return audioContext;
+      }
+
+      function refreshSpeechVoices() {
+        if ("speechSynthesis" in window) availableVoices = window.speechSynthesis.getVoices();
+      }
+
+      if ("speechSynthesis" in window) {
+        refreshSpeechVoices();
+        window.speechSynthesis.addEventListener("voiceschanged", refreshSpeechVoices);
+      }
+
+      function tone(frequency, duration, type = "square", volume = 0.045, endFrequency = frequency, delay = 0) {
+        const context = unlockAudio();
+        if (!context) return;
+        const start = context.currentTime + delay;
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = type;
+        oscillator.frequency.setValueAtTime(frequency, start);
+        oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, endFrequency), start + duration);
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(volume, start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(start);
+        oscillator.stop(start + duration + 0.02);
+      }
+
+      function noiseBurst(duration = 0.12, volume = 0.08) {
+        const context = unlockAudio();
+        if (!context) return;
+        const buffer = context.createBuffer(1, context.sampleRate * duration, context.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < data.length; i += 1) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+        const source = context.createBufferSource();
+        const filter = context.createBiquadFilter();
+        const gain = context.createGain();
+        source.buffer = buffer;
+        filter.type = "bandpass";
+        filter.frequency.value = 900;
+        filter.Q.value = 1.2;
+        gain.gain.value = volume;
+        source.connect(filter);
+        filter.connect(gain);
+        gain.connect(context.destination);
+        source.start();
+      }
+
+      function announceFight() {
+        unlockAudio();
+        tone(392, 0.16, "square", 0.06, 523, 0);
+        tone(523, 0.16, "square", 0.06, 659, 0.14);
+        tone(659, 0.28, "square", 0.07, 784, 0.28);
+        speakWizardLine("Fight!", true);
+      }
+
+      function chooseWizardVoice() {
+        const voices = availableVoices.length ? availableVoices : window.speechSynthesis.getVoices();
+        return voices.find((voice) => /male|bass|baritone|deep|uk english male/i.test(`${voice.name} ${voice.lang}`))
+          || voices.find((voice) => /^en-GB/i.test(voice.lang))
+          || voices.find((voice) => /^en/i.test(voice.lang))
+          || null;
+      }
+
+      function speakWizardLine(text, impact = false) {
+        if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) return;
+        window.speechSynthesis.cancel();
+        const line = new SpeechSynthesisUtterance(text);
+        line.rate = 0.85;
+        line.pitch = 0.3;
+        line.volume = 1;
+        const voice = chooseWizardVoice();
+        if (voice) line.voice = voice;
+        if (impact) playVoiceImpact();
+        window.speechSynthesis.speak(line);
+      }
+
+      function playVoiceImpact() {
+        const context = unlockAudio();
+        if (!context) return;
+        const start = context.currentTime;
+        const oscillator = context.createOscillator();
+        const envelope = context.createGain();
+        const lowPass = context.createBiquadFilter();
+        const delay = context.createDelay(0.4);
+        const feedback = context.createGain();
+        const echoGain = context.createGain();
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(60, start);
+        envelope.gain.setValueAtTime(0.0001, start);
+        envelope.gain.exponentialRampToValueAtTime(0.22, start + 0.025);
+        envelope.gain.exponentialRampToValueAtTime(0.0001, start + 0.85);
+        lowPass.type = "lowpass";
+        lowPass.frequency.setValueAtTime(180, start);
+        lowPass.Q.value = 0.8;
+        delay.delayTime.value = 0.18;
+        feedback.gain.value = 0.2;
+        echoGain.gain.value = 0.24;
+        oscillator.connect(envelope);
+        envelope.connect(lowPass);
+        lowPass.connect(context.destination);
+        lowPass.connect(delay);
+        delay.connect(echoGain);
+        echoGain.connect(context.destination);
+        delay.connect(feedback);
+        feedback.connect(delay);
+        oscillator.start(start);
+        oscillator.stop(start + 0.9);
+      }
+
+      function playMagicSound() {
+        tone(880, 0.18, "sawtooth", 0.045, 180, 0);
+      }
+
+      function playShieldSound() {
+        tone(180, 0.16, "triangle", 0.07, 75, 0);
+        tone(420, 0.08, "square", 0.035, 180, 0.02);
+      }
+
+      function playJumpSound() {
+        tone(240, 0.18, "square", 0.04, 620, 0);
+      }
+
+      function playHitSound() {
+        noiseBurst(0.11, 0.09);
+        tone(110, 0.08, "square", 0.035, 55, 0);
+      }
+
+      function playDefeatMelody() {
+        tone(440, 0.18, "square", 0.055, 330, 0);
+        tone(330, 0.18, "square", 0.05, 247, 0.18);
+        tone(247, 0.32, "square", 0.06, 110, 0.36);
+      }
 
       function update(delta) {
         const dt = Math.min(delta / 16.67, 2);
+        superMove.speechTimer = Math.max(0, superMove.speechTimer - dt);
+        roundBannerTimer = Math.max(0, roundBannerTimer - dt);
+        koBannerTimer = Math.max(0, koBannerTimer - dt);
         if (gameState === "STAGE_SELECT") {
           updateParticles(dt);
           return;
@@ -427,6 +611,12 @@
           return;
         }
         if (gameOver) {
+          updateParticles(dt);
+          return;
+        }
+
+        if (roundTransitionActive) {
+          updateRoundTransition(dt);
           updateParticles(dt);
           return;
         }
@@ -448,12 +638,12 @@
       }
 
       function updatePlayer(dt) {
-        if (player.hurtTimer > 0) return;
         if (!keys.has("arrowdown") && !keys.has("a")) superMove.inputLock = false;
         if (keys.has("arrowdown") && keys.has("a") && !superMove.inputLock && player.health <= 30) {
           startUltimate();
           return;
         }
+        if (player.hurtTimer > 0) return;
         const left = keys.has("arrowleft");
         const right = keys.has("arrowright");
         player.vx = (right ? 3.5 : 0) + (left ? -3.5 : 0);
@@ -462,6 +652,7 @@
           player.vy = -11;
           player.grounded = false;
           player.jumpLock = true;
+          playJumpSound();
           burst(player.x, player.y, COLORS.mid, 5);
         }
         if (!keys.has("arrowup")) player.jumpLock = false;
@@ -473,6 +664,7 @@
         superMove.timer = 0;
         superMove.damageApplied = false;
         superMove.inputLock = true;
+        superMove.speechTimer = 180;
         player.vx = 0;
         player.vy = 0;
         player.attackTimer = 18;
@@ -482,6 +674,11 @@
         bot.attackTimer = 0;
         burst(player.x + player.facing * 28, player.y - 58, COLORS.green, 18);
         screenShake = 2;
+        speakUltimateLine();
+      }
+
+      function speakUltimateLine() {
+        speakWizardLine("You shall not pass!");
       }
 
       function updateUltimate(dt) {
@@ -498,6 +695,7 @@
         if (timer >= 43 && !superMove.damageApplied) {
           superMove.damageApplied = true;
           bot.health = Math.max(0, bot.health - 55);
+          playHitSound();
           bot.hurtTimer = 26;
           bot.flashTimer = 26;
           bot.vx = player.facing * 13;
@@ -516,14 +714,49 @@
         }
       }
 
-      function endRoundIfNeeded() {
-        if (player.health <= 0 || bot.health <= 0) {
-          gameOver = true;
-          const playerWon = bot.health <= 0;
-          statusMessage.innerHTML = `${playerWon ? "SHANDALF WINS" : `${bot.name} WINS`}<br><small>Press R to rematch</small>`;
-          statusMessage.classList.add("visible");
-          burst(playerWon ? bot.x : player.x, WORLD.floor - 52, playerWon ? COLORS.glow : COLORS.mid, 18);
+      function updateRoundTransition(dt) {
+        roundTransitionTimer = Math.max(0, roundTransitionTimer - dt);
+        if (roundTransitionTimer > 0) return;
+        if (playerRoundWins >= 2 || botRoundWins >= 2) {
+          roundTransitionActive = false;
+          finishMatch();
+          return;
         }
+        round += 1;
+        roundTransitionActive = false;
+        resetRound();
+        announceFight();
+      }
+
+      function endRoundIfNeeded() {
+        if (roundTransitionActive || gameOver || (player.health > 0 && bot.health > 0)) return;
+        const playerWon = bot.health <= 0;
+        if (playerWon) {
+          playerRoundWins += 1;
+          arrSecured += 100000 + Math.ceil(player.health) * 1000;
+        } else {
+          botRoundWins += 1;
+        }
+        roundTransitionActive = true;
+        roundTransitionTimer = 90;
+        koBannerTimer = 90;
+        screenShake = 7;
+        playDefeatMelody();
+        burst(playerWon ? bot.x : player.x, WORLD.floor - 52, playerWon ? COLORS.glow : COLORS.mid, 18);
+      }
+
+      function finishMatch() {
+        gameOver = true;
+        matchWinner = playerRoundWins >= 2 ? "player" : "bot";
+        if (matchWinner === "player") {
+          winStreak += 1;
+          speakWizardLine(`Deal closed! Personio defeats ${bot.name}!`, true);
+          statusMessage.innerHTML = `DEAL CLOSED! PERSONIO DEFEATS ${bot.name}! +$200,000 ARR<br><small>PRESS ENTER: NEXT COMPETITOR | PRESS ESC: TITLE SCREEN</small>`;
+        } else {
+          winStreak = 0;
+          statusMessage.innerHTML = `${bot.name} WINS THE MATCH<br><small>PRESS ENTER: NEXT COMPETITOR | PRESS ESC: TITLE SCREEN</small>`;
+        }
+        statusMessage.classList.add("visible");
       }
 
       function updateBot(dt) {
@@ -568,6 +801,7 @@
       function castSpell(caster) {
         caster.attackCooldown = 34;
         caster.attackTimer = 10;
+        playMagicSound();
         projectiles.push({
           x: caster.x + caster.facing * 32,
           y: caster.y - 56,
@@ -585,6 +819,7 @@
         if (Math.abs(target.x - attacker.x) < reach && Math.abs(target.y - attacker.y) < 48) {
           attacker.hitRegistered = true;
           target.health = Math.max(0, target.health - 8);
+          playHitSound();
           target.hurtTimer = 12;
           target.flashTimer = 8;
           target.vx = attacker.facing * 4;
@@ -600,6 +835,7 @@
           const target = spell.owner === player ? bot : player;
           if (spell.life > 0 && Math.abs(spell.x - target.x) < 34 && Math.abs(spell.y - (target.y - 50)) < 50) {
             target.health = Math.max(0, target.health - 14);
+            playHitSound();
             target.hurtTimer = 16;
             target.flashTimer = 10;
             target.vx = spell.owner.facing * 5;
@@ -658,6 +894,8 @@
         drawProjectiles();
         drawParticles();
         drawUltimateEffect();
+        drawUltimateSpeechBubble();
+        drawRoundBanner();
         ctx.restore();
       }
 
@@ -714,16 +952,29 @@
           for (let x = 12; x < beamWidth; x += 47) ctx.fillRect(x, beamY + 24 - (x % 4) * 5, 9, 9);
         }
 
-        if (timer >= 43 && timer < 66) {
-          ctx.fillStyle = COLORS.glow;
-          ctx.font = "bold 28px Courier New, monospace";
-          ctx.textAlign = "center";
-          ctx.fillText("YOU SHALL NOT PASS!", WORLD.width / 2, 170);
-          ctx.fillStyle = COLORS.white;
-          ctx.font = "bold 13px Courier New, monospace";
-          ctx.fillText("PASSED?  NO.", WORLD.width / 2, 198);
-        }
+        ctx.textAlign = "left";
+        ctx.restore();
+      }
 
+      function drawUltimateSpeechBubble() {
+        if (superMove.speechTimer <= 0) return;
+        const bubbleWidth = 330;
+        const bubbleHeight = 54;
+        const bubbleX = Math.max(24, Math.min(WORLD.width - bubbleWidth - 24, player.x - bubbleWidth / 2));
+        const bubbleY = Math.max(116, player.y - 170);
+        ctx.save();
+        ctx.fillStyle = COLORS.white;
+        ctx.fillRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight);
+        ctx.fillStyle = COLORS.black;
+        ctx.fillRect(bubbleX + 5, bubbleY + 5, bubbleWidth - 10, bubbleHeight - 10);
+        ctx.fillStyle = COLORS.glow;
+        ctx.font = "bold 18px Courier New, monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("YOU SHALL NOT PASS!", bubbleX + bubbleWidth / 2, bubbleY + 33);
+        ctx.fillStyle = COLORS.white;
+        ctx.fillRect(player.x - 12, bubbleY + bubbleHeight, 24, 8);
+        ctx.fillStyle = COLORS.black;
+        ctx.fillRect(player.x - 6, bubbleY + bubbleHeight + 8, 12, 8);
         ctx.textAlign = "left";
         ctx.restore();
       }
@@ -1120,10 +1371,74 @@
         drawHealthBar(38, 49, 330, player.health, player.name, true);
         drawHealthBar(592, 49, 330, bot.health, bot.name, false, bot.maxHealth, bot.color);
         drawOpponentAvatar(bot);
+        drawRoundMarkers(38, playerRoundWins, COLORS.glow);
+        drawRoundMarkers(592, botRoundWins, bot.color);
+        drawScoreTracker();
         ctx.fillStyle = COLORS.mid;
         ctx.font = "bold 16px Courier New, monospace";
         ctx.textAlign = "center";
-        ctx.fillText("VS", WORLD.width / 2, 76);
+        ctx.fillText("VS", WORLD.width / 2, 104);
+        ctx.textAlign = "left";
+      }
+
+      function drawRoundMarkers(x, wins, color) {
+        ctx.fillStyle = COLORS.white;
+        ctx.font = "bold 9px Courier New, monospace";
+        ctx.textAlign = "left";
+        ctx.fillText("ROUNDS", x, 84);
+        for (let marker = 0; marker < 2; marker += 1) {
+          ctx.fillStyle = marker < wins ? COLORS.glow : COLORS.deep;
+          ctx.fillRect(x + 54 + marker * 19, 77, 13, 9);
+          ctx.strokeStyle = marker < wins ? COLORS.glow : color;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x + 54 + marker * 19, 77, 13, 9);
+        }
+        ctx.textAlign = "left";
+      }
+
+      function drawScoreTracker() {
+        ctx.fillStyle = COLORS.glow;
+        ctx.font = "bold 13px Courier New, monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(`ARR SECURED: ${formatMoney(arrSecured)}`, 405, 19);
+        ctx.fillStyle = COLORS.mid;
+        ctx.font = "bold 10px Courier New, monospace";
+        ctx.fillText(`WIN STREAK: ${winStreak}`, 555, 19);
+        ctx.textAlign = "left";
+      }
+
+      function formatMoney(amount) {
+        return `$${amount.toLocaleString("en-US")}`;
+      }
+
+      function drawRoundBanner() {
+        if (gameOver) return;
+        if (koBannerTimer > 0) {
+          ctx.fillStyle = COLORS.black;
+          ctx.fillRect(320, 150, 320, 78);
+          ctx.strokeStyle = COLORS.red;
+          ctx.lineWidth = 4;
+          ctx.strokeRect(320, 150, 320, 78);
+          ctx.fillStyle = COLORS.red;
+          ctx.font = "bold 42px Courier New, monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("K.O.!", WORLD.width / 2, 202);
+          ctx.textAlign = "left";
+          return;
+        }
+        if (roundBannerTimer <= 0) return;
+        ctx.fillStyle = COLORS.black;
+        ctx.fillRect(330, 150, 300, 78);
+        ctx.strokeStyle = COLORS.glow;
+        ctx.lineWidth = 4;
+        ctx.strokeRect(330, 150, 300, 78);
+        ctx.fillStyle = COLORS.glow;
+        ctx.font = "bold 23px Courier New, monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(round === 3 ? "FINAL ROUND" : `ROUND ${round}`, WORLD.width / 2, 181);
+        ctx.fillStyle = COLORS.white;
+        ctx.font = "bold 19px Courier New, monospace";
+        ctx.fillText("FIGHT!", WORLD.width / 2, 207);
         ctx.textAlign = "left";
       }
 
