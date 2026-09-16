@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shandalf vs Rippling Bot</title>
+  <style>
+    :root {
+      --ink: #0f380f;
+      --deep: #306230;
+      --mid: #8bac0f;
+      --glow: #9bbc0f;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--ink);
+      color: var(--glow);
+      font-family: "Courier New", Courier, monospace;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      overflow-x: hidden;
+    }
+
+    main {
+      width: min(100%, 1120px);
+    }
+
+    .masthead {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 14px;
+      text-transform: uppercase;
+    }
+
+    .eyebrow {
+      margin: 0 0 5px;
+      color: var(--mid);
+      font-size: clamp(10px, 1.5vw, 13px);
+      letter-spacing: 3px;
+    }
+
+    h1 {
+      margin: 0;
+      color: var(--glow);
+      font-size: clamp(22px, 4vw, 40px);
+      letter-spacing: 2px;
+      line-height: 1;
+      text-shadow: 3px 3px var(--deep);
+    }
+
+    .round-label {
+      padding: 8px 10px;
+      border: 2px solid var(--deep);
+      color: var(--mid);
+      font-size: 11px;
+      letter-spacing: 1px;
+      white-space: nowrap;
+    }
+
+    .cabinet {
+      border: 4px solid var(--deep);
+      background: var(--deep);
+      box-shadow: 0 0 0 4px var(--ink), 0 0 0 7px var(--deep);
+    }
+
+    .screen-wrap {
+      position: relative;
+      background: var(--ink);
+      aspect-ratio: 16 / 9;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    .status {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+    }
+
+    .status-message {
+      display: none;
+      padding: 13px 18px;
+      border: 3px solid var(--glow);
+      background: var(--ink);
+      color: var(--glow);
+      text-align: center;
+      text-transform: uppercase;
+      font-size: clamp(12px, 2vw, 18px);
+      line-height: 1.45;
+      letter-spacing: 2px;
+      box-shadow: 6px 6px 0 var(--deep);
+    }
+
+    .status-message.visible { display: block; }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 18px;
+      padding: 13px 16px;
+      border-top: 4px solid var(--deep);
+      background: var(--ink);
+    }
+
+    .key-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      color: var(--mid);
+      font-size: 11px;
+      line-height: 1.5;
+      text-transform: uppercase;
+    }
+
+    .key-list span { white-space: nowrap; }
+
+    kbd {
+      display: inline-block;
+      min-width: 23px;
+      margin-right: 4px;
+      padding: 3px 5px;
+      border: 2px solid var(--mid);
+      color: var(--glow);
+      text-align: center;
+      font-weight: 700;
+    }
+
+    .tip {
+      color: var(--mid);
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-align: right;
+      text-transform: uppercase;
+    }
+
+    @media (max-width: 640px) {
+      body { padding: 13px; }
+      .masthead { align-items: start; flex-direction: column; gap: 10px; }
+      .round-label { align-self: stretch; text-align: center; }
+      .controls { grid-template-columns: 1fr; }
+      .tip { text-align: left; }
+      .key-list { gap: 8px 10px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">Pocket Arena // Sector 08</p>
+        <h1>Shandalf <span aria-hidden="true">vs</span> Rippling Bot</h1>
+      </div>
+      <div class="round-label">Round <span id="roundNumber">01</span> // Live</div>
+    </header>
+
+    <section class="cabinet" aria-label="Shandalf versus Rippling Bot game">
+      <div class="screen-wrap">
+        <canvas id="game" width="960" height="540" aria-label="Arcade fighting game canvas"></canvas>
+        <div class="status"><div id="statusMessage" class="status-message"></div></div>
+      </div>
+      <div class="controls">
+        <div class="key-list">
+          <span><kbd>←</kbd><kbd>→</kbd> Move</span>
+          <span><kbd>↑</kbd> Jump</span>
+          <span><kbd>A</kbd> Magic</span>
+          <span><kbd>R</kbd> Restart</span>
+        </div>
+        <div class="tip">Land the spell. Keep your distance.</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const canvas = document.getElementById("game");
+      const ctx = canvas.getContext("2d");
+      const statusMessage = document.getElementById("statusMessage");
+      const roundNumber = document.getElementById("roundNumber");
+
+      const COLORS = {
+        ink: "#0f380f",
+        deep: "#306230",
+        mid: "#8bac0f",
+        glow: "#9bbc0f"
+      };
+      const WORLD = { width: 960, height: 540, floor: 442 };
+      const keys = new Set();
+      let projectiles = [];
+      let particles = [];
+      let round = 1;
+      let gameOver = false;
+      let lastTime = performance.now();
+      let botThink = 0;
+
+      const player = createFighter({
+        name: "SHANDALF",
+        x: 220,
+        color: COLORS.glow,
+        accent: COLORS.mid,
+        facing: 1,
+        isPlayer: true
+      });
+      const bot = createFighter({
+        name: "RIPPLING BOT",
+        x: 740,
+        color: COLORS.mid,
+        accent: COLORS.glow,
+        facing: -1,
+        isPlayer: false
+      });
+
+      function createFighter(options) {
+        return {
+          ...options,
+          y: WORLD.floor,
+          vx: 0,
+          vy: 0,
+          width: 54,
+          height: 88,
+          health: 100,
+          grounded: true,
+          attackCooldown: 0,
+          attackTimer: 0,
+          hurtTimer: 0,
+          flashTimer: 0,
+          walkCycle: 0,
+          jumpLock: false
+        };
+      }
+
+      function resetRound() {
+        player.x = 220;
+        player.y = WORLD.floor;
+        player.vx = 0;
+        player.vy = 0;
+        player.health = 100;
+        player.grounded = true;
+        player.attackCooldown = 0;
+        player.attackTimer = 0;
+        player.hurtTimer = 0;
+        bot.x = 740;
+        bot.y = WORLD.floor;
+        bot.vx = 0;
+        bot.vy = 0;
+        bot.health = 100;
+        bot.grounded = true;
+        bot.attackCooldown = 0;
+        bot.attackTimer = 0;
+        bot.hurtTimer = 0;
+        projectiles = [];
+        particles = [];
+        gameOver = false;
+        statusMessage.classList.remove("visible");
+        roundNumber.textContent = String(round).padStart(2, "0");
+      }
+
+      function handleKeyDown(event) {
+        const key = event.key.toLowerCase();
+        if (["arrowleft", "arrowright", "arrowup", "a", "r"].includes(key)) event.preventDefault();
+        keys.add(key);
+        if (key === "r" && gameOver) {
+          round += 1;
+          resetRound();
+        }
+      }
+
+      function handleKeyUp(event) {
+        keys.delete(event.key.toLowerCase());
+      }
+
+      window.addEventListener("keydown", handleKeyDown);
+      window.addEventListener("keyup", handleKeyUp);
+
+      function update(delta) {
+        const dt = Math.min(delta / 16.67, 2);
+        if (gameOver) {
+          updateParticles(dt);
+          return;
+        }
+
+        updatePlayer(dt);
+        updateBot(dt);
+        updateFighter(player, dt);
+        updateFighter(bot, dt);
+        updateProjectiles(dt);
+        updateParticles(dt);
+
+        if (player.health <= 0 || bot.health <= 0) {
+          gameOver = true;
+          const playerWon = bot.health <= 0;
+          statusMessage.innerHTML = `${playerWon ? "SHANDALF WINS" : "RIPPLING BOT WINS"}<br><small>Press R to rematch</small>`;
+          statusMessage.classList.add("visible");
+          burst(playerWon ? bot.x : player.x, WORLD.floor - 52, playerWon ? COLORS.glow : COLORS.mid, 18);
+        }
+      }
+
+      function updatePlayer(dt) {
+        if (player.hurtTimer > 0) return;
+        const left = keys.has("arrowleft");
+        const right = keys.has("arrowright");
+        player.vx = (right ? 3.5 : 0) + (left ? -3.5 : 0);
+        if (player.vx !== 0) player.facing = Math.sign(player.vx);
+        if (keys.has("arrowup") && player.grounded && !player.jumpLock) {
+          player.vy = -11;
+          player.grounded = false;
+          player.jumpLock = true;
+          burst(player.x, player.y, COLORS.mid, 5);
+        }
+        if (!keys.has("arrowup")) player.jumpLock = false;
+        if (keys.has("a") && player.attackCooldown <= 0) castSpell(player);
+      }
+
+      function updateBot(dt) {
+        if (bot.hurtTimer > 0) return;
+        botThink -= dt;
+        const distance = player.x - bot.x;
+        bot.facing = distance >= 0 ? 1 : -1;
+        bot.vx = Math.abs(distance) > 112 ? bot.facing * 1.35 : 0;
+        if (bot.grounded && Math.abs(distance) < 170 && botThink <= 0) {
+          botThink = 70 + Math.random() * 55;
+          if (Math.random() > 0.35) bot.vy = -9.5;
+        }
+        if (Math.abs(distance) < 150 && bot.attackCooldown <= 0 && Math.random() > 0.5) {
+          bot.attackTimer = 13;
+          bot.attackCooldown = 52;
+        }
+      }
+
+      function updateFighter(fighter, dt) {
+        fighter.attackCooldown = Math.max(0, fighter.attackCooldown - dt);
+        fighter.attackTimer = Math.max(0, fighter.attackTimer - dt);
+        if (fighter.attackTimer === 0) fighter.hitRegistered = false;
+        fighter.hurtTimer = Math.max(0, fighter.hurtTimer - dt);
+        fighter.flashTimer = Math.max(0, fighter.flashTimer - dt);
+        fighter.vy += 0.55 * dt;
+        fighter.x += fighter.vx * dt;
+        fighter.y += fighter.vy * dt;
+        fighter.vx *= Math.pow(0.72, dt);
+        fighter.walkCycle += Math.abs(fighter.vx) * dt;
+        if (fighter.y >= WORLD.floor) {
+          fighter.y = WORLD.floor;
+          fighter.vy = 0;
+          fighter.grounded = true;
+        } else {
+          fighter.grounded = false;
+        }
+        fighter.x = Math.max(55, Math.min(WORLD.width - 55, fighter.x));
+        if (fighter.isPlayer && fighter.attackTimer > 0) resolveStaffHit(fighter, bot);
+        if (!fighter.isPlayer && fighter.attackTimer > 0) resolveStaffHit(fighter, player);
+      }
+
+      function castSpell(caster) {
+        caster.attackCooldown = 34;
+        caster.attackTimer = 10;
+        projectiles.push({
+          x: caster.x + caster.facing * 32,
+          y: caster.y - 56,
+          vx: caster.facing * 7,
+          radius: 9,
+          life: 100,
+          owner: caster
+        });
+        burst(caster.x + caster.facing * 31, caster.y - 56, COLORS.glow, 6);
+      }
+
+      function resolveStaffHit(attacker, target) {
+        if (attacker.hitRegistered || attacker.attackTimer > 7) return;
+        const reach = 72;
+        if (Math.abs(target.x - attacker.x) < reach && Math.abs(target.y - attacker.y) < 48) {
+          attacker.hitRegistered = true;
+          target.health = Math.max(0, target.health - 8);
+          target.hurtTimer = 12;
+          target.flashTimer = 8;
+          target.vx = attacker.facing * 4;
+          burst(target.x, target.y - 54, COLORS.glow, 8);
+        }
+        if (attacker.attackTimer <= 1) attacker.hitRegistered = false;
+      }
+
+      function updateProjectiles(dt) {
+        projectiles.forEach((spell) => {
+          spell.x += spell.vx * dt;
+          spell.life -= dt;
+          const target = spell.owner === player ? bot : player;
+          if (spell.life > 0 && Math.abs(spell.x - target.x) < 34 && Math.abs(spell.y - (target.y - 50)) < 50) {
+            target.health = Math.max(0, target.health - 14);
+            target.hurtTimer = 16;
+            target.flashTimer = 10;
+            target.vx = spell.owner.facing * 5;
+            burst(spell.x, spell.y, COLORS.glow, 12);
+            spell.life = 0;
+          }
+        });
+        projectiles = projectiles.filter((spell) => spell.life > 0 && spell.x > -30 && spell.x < WORLD.width + 30);
+      }
+
+      function burst(x, y, color, amount) {
+        for (let i = 0; i < amount; i += 1) {
+          particles.push({
+            x,
+            y,
+            vx: (Math.random() - 0.5) * 5,
+            vy: (Math.random() - 0.65) * 5,
+            life: 20 + Math.random() * 20,
+            color,
+            size: Math.random() > 0.5 ? 4 : 3
+          });
+        }
+      }
+
+      function updateParticles(dt) {
+        particles.forEach((particle) => {
+          particle.x += particle.vx * dt;
+          particle.y += particle.vy * dt;
+          particle.vy += 0.14 * dt;
+          particle.life -= dt;
+        });
+        particles = particles.filter((particle) => particle.life > 0);
+      }
+
+      function draw() {
+        ctx.fillStyle = COLORS.ink;
+        ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+        drawBackdrop();
+        drawHud();
+        drawFighter(player);
+        drawFighter(bot);
+        drawProjectiles();
+        drawParticles();
+      }
+
+      function drawBackdrop() {
+        ctx.fillStyle = COLORS.deep;
+        ctx.fillRect(0, WORLD.floor, WORLD.width, WORLD.height - WORLD.floor);
+        ctx.fillStyle = COLORS.mid;
+        ctx.fillRect(0, WORLD.floor, WORLD.width, 3);
+        ctx.fillStyle = COLORS.deep;
+        for (let x = 0; x < WORLD.width; x += 48) ctx.fillRect(x, WORLD.floor + 25, 2, 52);
+        for (let y = WORLD.floor + 25; y < WORLD.height; y += 26) ctx.fillRect(0, y, WORLD.width, 2);
+
+        ctx.fillStyle = COLORS.deep;
+        ctx.fillRect(0, 170, 150, 7);
+        ctx.fillRect(810, 170, 150, 7);
+        ctx.fillRect(75, 177, 7, 95);
+        ctx.fillRect(878, 177, 7, 95);
+        ctx.fillStyle = COLORS.mid;
+        ctx.fillRect(67, 267, 23, 5);
+        ctx.fillRect(870, 267, 23, 5);
+        ctx.fillStyle = COLORS.deep;
+        ctx.fillRect(175, 125, 18, 115);
+        ctx.fillRect(767, 125, 18, 115);
+        ctx.fillStyle = COLORS.mid;
+        ctx.fillRect(171, 119, 26, 8);
+        ctx.fillRect(763, 119, 26, 8);
+
+        ctx.fillStyle = COLORS.mid;
+        ctx.font = "10px Courier New, monospace";
+        ctx.fillText("ARC-08", 20, 32);
+        ctx.fillText("MAGIC / MACHINE", 770, 32);
+        ctx.fillStyle = COLORS.deep;
+        ctx.fillRect(420, 80, 120, 3);
+        ctx.fillRect(447, 89, 66, 3);
+      }
+
+      function drawHud() {
+        drawHealthBar(38, 49, 330, player.health, player.name, true);
+        drawHealthBar(592, 49, 330, bot.health, bot.name, false);
+        ctx.fillStyle = COLORS.mid;
+        ctx.font = "bold 16px Courier New, monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("VS", WORLD.width / 2, 76);
+        ctx.textAlign = "left";
+      }
+
+      function drawHealthBar(x, y, width, health, label, isPlayer) {
+        ctx.fillStyle = COLORS.mid;
+        ctx.font = "bold 12px Courier New, monospace";
+        ctx.textAlign = isPlayer ? "left" : "right";
+        ctx.fillText(label, isPlayer ? x : x + width, y - 10);
+        ctx.fillStyle = COLORS.deep;
+        ctx.fillRect(x, y, width, 22);
+        ctx.fillStyle = health > 35 ? COLORS.glow : COLORS.mid;
+        const fillWidth = Math.max(0, width * health / 100);
+        ctx.fillRect(isPlayer ? x : x + width - fillWidth, y, fillWidth, 22);
+        ctx.strokeStyle = COLORS.mid;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x, y, width, 22);
+        ctx.fillStyle = COLORS.ink;
+        ctx.font = "bold 11px Courier New, monospace";
+        ctx.textAlign = isPlayer ? "left" : "right";
+        ctx.fillText(`${Math.ceil(health)} HP`, isPlayer ? x + 8 : x + width - 8, y + 15);
+        ctx.textAlign = "left";
+      }
+
+      function drawFighter(fighter) {
+        const x = Math.round(fighter.x);
+        const y = Math.round(fighter.y);
+        const moving = Math.abs(fighter.vx) > 0.4 && fighter.grounded;
+        const step = moving ? (Math.floor(fighter.walkCycle / 5) % 2) * 5 : 0;
+        const primary = fighter.flashTimer > 0 ? COLORS.glow : fighter.color;
+        const secondary = fighter.flashTimer > 0 ? COLORS.mid : fighter.accent;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(fighter.facing, 1);
+        ctx.imageSmoothingEnabled = false;
+
+        ctx.fillStyle = COLORS.ink;
+        ctx.fillRect(-27, -2, 54, 7);
+        ctx.fillRect(-17, 5, 34, 5);
+        ctx.fillStyle = secondary;
+        ctx.fillRect(-22, 2, 44, 5);
+        ctx.fillStyle = primary;
+        ctx.fillRect(-18, -30, 36, 31);
+        ctx.fillRect(-13, -38, 26, 8);
+        ctx.fillStyle = COLORS.ink;
+        ctx.fillRect(-12, -32, 7, 7);
+        ctx.fillRect(5, -32, 7, 7);
+        ctx.fillStyle = secondary;
+        ctx.fillRect(-6, -22, 12, 4);
+
+        if (fighter.isPlayer) drawWizardBody(primary, secondary, step);
+        else drawBotBody(primary, secondary, step);
+
+        if (fighter.attackTimer > 0) {
+          ctx.fillStyle = COLORS.glow;
+          ctx.fillRect(17, -61, 5, 55);
+          ctx.fillRect(22, -64, 5, 7);
+          ctx.fillRect(27, -61, 5, 5);
+        }
+        ctx.restore();
+      }
+
+      function drawWizardBody(primary, secondary, step) {
+        ctx.fillStyle = secondary;
+        ctx.fillRect(-21, -3, 42, 11);
+        ctx.fillRect(-17, 8, 34, 12);
+        ctx.fillStyle = primary;
+        ctx.fillRect(-14, 20, 10, 19 + step);
+        ctx.fillRect(5, 20, 10, 19 - step);
+        ctx.fillStyle = COLORS.ink;
+        ctx.fillRect(-19, 39 + step, 15, 5);
+        ctx.fillRect(4, 39 - step, 15, 5);
+        ctx.fillStyle = secondary;
+        ctx.fillRect(18, 4, 10, 7);
+        ctx.fillRect(-29, 4, 10, 7);
+        ctx.fillStyle = COLORS.mid;
+        ctx.fillRect(28, -49, 4, 48);
+        ctx.fillRect(25, -52, 10, 5);
+        ctx.fillRect(28, -57, 4, 5);
+      }
+
+      function drawBotBody(primary, secondary, step) {
+        ctx.fillStyle = secondary;
+        ctx.fillRect(-20, -3, 40, 14);
+        ctx.fillRect(-16, 11, 32, 13);
+        ctx.fillStyle = primary;
+        ctx.fillRect(-15, 24, 10, 16 + step);
+        ctx.fillRect(5, 24, 10, 16 - step);
+        ctx.fillStyle = COLORS.ink;
+        ctx.fillRect(-19, 40 + step, 15, 5);
+        ctx.fillRect(4, 40 - step, 15, 5);
+        ctx.fillStyle = secondary;
+        ctx.fillRect(19, 1, 13, 9);
+        ctx.fillRect(-32, 1, 13, 9);
+        ctx.fillStyle = COLORS.ink;
+        ctx.fillRect(-8, -20, 5, 5);
+        ctx.fillRect(3, -20, 5, 5);
+      }
+
+      function drawProjectiles() {
+        projectiles.forEach((spell) => {
+          ctx.fillStyle = COLORS.mid;
+          ctx.fillRect(Math.round(spell.x - 12), Math.round(spell.y - 4), 24, 8);
+          ctx.fillStyle = COLORS.glow;
+          ctx.fillRect(Math.round(spell.x - 7), Math.round(spell.y - 9), 14, 18);
+          ctx.fillStyle = COLORS.ink;
+          ctx.fillRect(Math.round(spell.x - 3), Math.round(spell.y - 3), 6, 6);
+        });
+      }
+
+      function drawParticles() {
+        particles.forEach((particle) => {
+          ctx.fillStyle = particle.color;
+          ctx.fillRect(Math.round(particle.x), Math.round(particle.y), particle.size, particle.size);
+        });
+      }
+
+      function loop(now) {
+        update(now - lastTime);
+        draw();
+        lastTime = now;
+        requestAnimationFrame(loop);
+      }
+
+      resetRound();
+      requestAnimationFrame(loop);
+    })();
+  </script>
+</body>
+</html>
