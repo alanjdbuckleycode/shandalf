@@ -226,7 +226,7 @@
       let projectiles = [];
       let particles = [];
       let round = 1;
-      let gameState = "STAGE_SELECT";
+      let gameState = "title";
       let gameOver = false;
       let matchWinner = null;
       let playerRoundWins = 0;
@@ -477,7 +477,7 @@
         if (gameState === "STAGE_SELECT" && (key === "enter" || key === " ")) {
           unlockAudio();
           currentStageId = stages[selectedStageIndex].id;
-          gameState = "title";
+          beginMatch();
           return;
         }
         if (gameState === "title" && (key === "arrowleft" || key === "arrowright")) {
@@ -492,14 +492,14 @@
           return;
         }
         if (key === "enter" && gameState === "title") {
-          beginMatch();
+          gameState = "STAGE_SELECT";
           return;
         }
         if (key === "enter" && gameOver) {
           if (matchWinner === "player") {
             selectedOpponentIndex = (selectedOpponentIndex + 1) % opponentOptions.length;
           }
-          gameState = "STAGE_SELECT";
+          gameState = "title";
           gameOver = false;
           statusMessage.classList.remove("visible");
           return;
