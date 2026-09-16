@@ -6,10 +6,10 @@
   <title>Shandalf vs Rippling Bot</title>
   <style>
     :root {
-      --ink: #0f380f;
-      --deep: #306230;
-      --mid: #8bac0f;
-      --glow: #9bbc0f;
+      --ink: #1d2b53;
+      --deep: #7e2553;
+      --mid: #29adff;
+      --glow: #ffcc00;
     }
 
     * { box-sizing: border-box; }
@@ -200,10 +200,17 @@
       const roundNumber = document.getElementById("roundNumber");
 
       const COLORS = {
-        ink: "#0f380f",
-        deep: "#306230",
-        mid: "#8bac0f",
-        glow: "#9bbc0f"
+        ink: "#1D2B53",
+        deep: "#7E2553",
+        mid: "#29ADFF",
+        glow: "#FFCC00",
+        gold: "#FFCC00",
+        white: "#FFF1E8",
+        green: "#00E436",
+        red: "#FF004D",
+        blueDark: "#1D5B8F",
+        purple: "#AB3472",
+        black: "#0F1021"
       };
       const WORLD = { width: 960, height: 540, floor: 442 };
       const keys = new Set();
@@ -536,36 +543,53 @@
       }
 
       function drawBackdrop() {
+        ctx.fillStyle = COLORS.ink;
+        ctx.fillRect(0, 0, WORLD.width, WORLD.floor);
+
+        // Layered skyline blocks keep the arena bright without losing its depth.
+        ctx.fillStyle = COLORS.black;
+        ctx.fillRect(0, 270, WORLD.width, WORLD.floor - 270);
+        ctx.fillStyle = COLORS.deep;
+        for (let x = 0; x < WORLD.width; x += 96) {
+          const height = 55 + ((x / 96) % 4) * 18;
+          ctx.fillRect(x, WORLD.floor - height, 72, height);
+          ctx.fillRect(x + 12, WORLD.floor - height - 10, 48, 10);
+        }
+        ctx.fillStyle = COLORS.purple;
+        for (let x = 18; x < WORLD.width; x += 48) {
+          const height = 25 + ((x / 48) % 3) * 12;
+          ctx.fillRect(x, WORLD.floor - height, 24, height);
+        }
+        ctx.fillStyle = COLORS.glow;
+        for (let x = 12; x < WORLD.width; x += 48) {
+          for (let y = WORLD.floor - 76; y < WORLD.floor - 8; y += 17) {
+            if ((x + y) % 3 !== 0) ctx.fillRect(x, y, 6, 5);
+          }
+        }
+        ctx.fillStyle = COLORS.mid;
+        ctx.fillRect(0, 244, WORLD.width, 4);
+        ctx.fillRect(62, 192, 5, 52);
+        ctx.fillRect(893, 192, 5, 52);
+        ctx.fillRect(48, 184, 33, 8);
+        ctx.fillRect(879, 184, 33, 8);
+
         ctx.fillStyle = COLORS.deep;
         ctx.fillRect(0, WORLD.floor, WORLD.width, WORLD.height - WORLD.floor);
+        ctx.fillStyle = COLORS.glow;
+        ctx.fillRect(0, WORLD.floor, WORLD.width, 4);
         ctx.fillStyle = COLORS.mid;
-        ctx.fillRect(0, WORLD.floor, WORLD.width, 3);
-        ctx.fillStyle = COLORS.deep;
-        for (let x = 0; x < WORLD.width; x += 48) ctx.fillRect(x, WORLD.floor + 25, 2, 52);
-        for (let y = WORLD.floor + 25; y < WORLD.height; y += 26) ctx.fillRect(0, y, WORLD.width, 2);
+        for (let x = 0; x < WORLD.width; x += 48) ctx.fillRect(x, WORLD.floor + 25, 3, 52);
+        for (let y = WORLD.floor + 25; y < WORLD.height; y += 26) ctx.fillRect(0, y, WORLD.width, 3);
+        ctx.fillStyle = COLORS.purple;
+        ctx.fillRect(0, WORLD.floor + 8, WORLD.width, 8);
 
-        ctx.fillStyle = COLORS.deep;
-        ctx.fillRect(0, 170, 150, 7);
-        ctx.fillRect(810, 170, 150, 7);
-        ctx.fillRect(75, 177, 7, 95);
-        ctx.fillRect(878, 177, 7, 95);
-        ctx.fillStyle = COLORS.mid;
-        ctx.fillRect(67, 267, 23, 5);
-        ctx.fillRect(870, 267, 23, 5);
-        ctx.fillStyle = COLORS.deep;
-        ctx.fillRect(175, 125, 18, 115);
-        ctx.fillRect(767, 125, 18, 115);
-        ctx.fillStyle = COLORS.mid;
-        ctx.fillRect(171, 119, 26, 8);
-        ctx.fillRect(763, 119, 26, 8);
-
-        ctx.fillStyle = COLORS.mid;
+        ctx.fillStyle = COLORS.white;
         ctx.font = "10px Courier New, monospace";
         ctx.fillText("ARC-08", 20, 32);
         ctx.fillText("MAGIC / MACHINE", 770, 32);
-        ctx.fillStyle = COLORS.deep;
-        ctx.fillRect(420, 80, 120, 3);
-        ctx.fillRect(447, 89, 66, 3);
+        ctx.fillStyle = COLORS.mid;
+        ctx.fillRect(420, 80, 120, 4);
+        ctx.fillRect(447, 91, 66, 4);
       }
 
       function drawHud() {
@@ -610,19 +634,9 @@
         ctx.scale(fighter.facing, 1);
         ctx.imageSmoothingEnabled = false;
 
-        ctx.fillStyle = COLORS.ink;
+        ctx.fillStyle = COLORS.black;
         ctx.fillRect(-27, -2, 54, 7);
         ctx.fillRect(-17, 5, 34, 5);
-        ctx.fillStyle = secondary;
-        ctx.fillRect(-22, 2, 44, 5);
-        ctx.fillStyle = primary;
-        ctx.fillRect(-18, -30, 36, 31);
-        ctx.fillRect(-13, -38, 26, 8);
-        ctx.fillStyle = COLORS.ink;
-        ctx.fillRect(-12, -32, 7, 7);
-        ctx.fillRect(5, -32, 7, 7);
-        ctx.fillStyle = secondary;
-        ctx.fillRect(-6, -22, 12, 4);
 
         if (fighter.isPlayer) drawWizardBody(primary, secondary, step);
         else drawBotBody(primary, secondary, step);
@@ -637,6 +651,38 @@
       }
 
       function drawWizardBody(primary, secondary, step) {
+        ctx.fillStyle = COLORS.blueDark;
+        ctx.fillRect(-18, -38, 36, 8);
+        ctx.fillStyle = COLORS.white;
+        ctx.fillRect(-15, -30, 30, 17);
+        ctx.fillRect(-11, -13, 22, 12);
+        ctx.fillStyle = COLORS.gold;
+        ctx.fillRect(-13, -28, 10, 5);
+        ctx.fillRect(3, -28, 10, 5);
+        ctx.fillRect(-3, -27, 6, 3);
+        ctx.fillStyle = COLORS.blueDark;
+        ctx.fillRect(-21, -3, 42, 11);
+        ctx.fillRect(-17, 8, 34, 12);
+        ctx.fillStyle = COLORS.mid;
+        ctx.fillRect(-14, 20, 10, 19 + step);
+        ctx.fillRect(5, 20, 10, 19 - step);
+        ctx.fillStyle = COLORS.black;
+        ctx.fillRect(-19, 39 + step, 15, 5);
+        ctx.fillRect(4, 39 - step, 15, 5);
+        ctx.fillStyle = COLORS.blueDark;
+        ctx.fillRect(18, 4, 10, 7);
+        ctx.fillRect(-29, 4, 10, 7);
+        ctx.fillStyle = COLORS.gold;
+        ctx.fillRect(28, -49, 4, 48);
+        ctx.fillRect(25, -52, 10, 5);
+        ctx.fillStyle = COLORS.green;
+        ctx.fillRect(24, -60, 12, 8);
+        ctx.fillRect(27, -63, 6, 3);
+        ctx.fillStyle = COLORS.white;
+        ctx.fillRect(-10, -13, 20, 5);
+      }
+
+      function drawOldWizardBody(primary, secondary, step) {
         ctx.fillStyle = secondary;
         ctx.fillRect(-21, -3, 42, 11);
         ctx.fillRect(-17, 8, 34, 12);
@@ -656,21 +702,28 @@
       }
 
       function drawBotBody(primary, secondary, step) {
-        ctx.fillStyle = secondary;
+        ctx.fillStyle = COLORS.blueDark;
         ctx.fillRect(-20, -3, 40, 14);
         ctx.fillRect(-16, 11, 32, 13);
-        ctx.fillStyle = primary;
+        ctx.fillStyle = COLORS.mid;
         ctx.fillRect(-15, 24, 10, 16 + step);
         ctx.fillRect(5, 24, 10, 16 - step);
-        ctx.fillStyle = COLORS.ink;
+        ctx.fillStyle = COLORS.black;
         ctx.fillRect(-19, 40 + step, 15, 5);
         ctx.fillRect(4, 40 - step, 15, 5);
-        ctx.fillStyle = secondary;
+        ctx.fillStyle = COLORS.blueDark;
         ctx.fillRect(19, 1, 13, 9);
         ctx.fillRect(-32, 1, 13, 9);
-        ctx.fillStyle = COLORS.ink;
-        ctx.fillRect(-8, -20, 5, 5);
-        ctx.fillRect(3, -20, 5, 5);
+        ctx.fillStyle = COLORS.black;
+        ctx.fillRect(-18, -38, 36, 8);
+        ctx.fillRect(-13, -30, 26, 20);
+        ctx.fillStyle = COLORS.red;
+        ctx.fillRect(-10, -25, 20, 6);
+        ctx.fillStyle = COLORS.glow;
+        ctx.fillRect(-6, -24, 4, 3);
+        ctx.fillRect(3, -24, 4, 3);
+        ctx.fillStyle = COLORS.white;
+        ctx.fillRect(-5, 0, 10, 4);
       }
 
       function drawProjectiles() {
