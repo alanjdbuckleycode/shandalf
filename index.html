@@ -1599,34 +1599,37 @@
         else drawBotBody(primary, secondary, step);
 
         if (fighter.meleeTimer > 0) {
-          ctx.fillStyle = primary;
           if (fighter.meleeType === "kick") {
             ctx.fillStyle = COLORS.blueDark;
             ctx.fillRect(5, 19, 12, 22);
-            ctx.fillStyle = primary;
+            ctx.fillStyle = fighter.isPlayer ? COLORS.mid : primary;
             ctx.fillRect(12, 21, 38, 9);
             ctx.fillRect(43, 18, 12, 8);
-            ctx.fillStyle = COLORS.glow;
+            ctx.fillStyle = fighter.isPlayer ? COLORS.blueDark : COLORS.glow;
             ctx.fillRect(51, 16, 7, 5);
           } else {
             ctx.fillStyle = COLORS.blueDark;
             ctx.fillRect(18, 3, 11, 11);
-            ctx.fillStyle = primary;
+            ctx.fillStyle = fighter.isPlayer ? COLORS.blueDark : primary;
             ctx.fillRect(18, -5, 28, 8);
             ctx.fillRect(41, -9, 9, 7);
-            ctx.fillStyle = COLORS.glow;
+            ctx.fillStyle = fighter.isPlayer ? COLORS.blueDark : COLORS.glow;
             ctx.fillRect(47, -10, 6, 5);
           }
         }
 
         if (fighter.shielding) {
+          const opponent = fighter.isPlayer ? bot : player;
+          const worldShieldSide = Math.sign(opponent.x - fighter.x) || fighter.facing;
+          const localShieldSide = worldShieldSide * fighter.facing;
           ctx.strokeStyle = COLORS.mid;
           ctx.lineWidth = 5;
           ctx.beginPath();
-          ctx.arc(fighter.facing * 28, -38, 34, -Math.PI * 0.62, Math.PI * 0.62);
+          ctx.moveTo(18 * localShieldSide, -66);
+          ctx.quadraticCurveTo(58 * localShieldSide, -38, 18 * localShieldSide, -10);
           ctx.stroke();
           ctx.fillStyle = COLORS.white;
-          ctx.fillRect(fighter.facing * 47 - 3, -42, 6, 8);
+          ctx.fillRect(48 * localShieldSide - 3, -42, 6, 8);
         }
 
         if (fighter.attackTimer > 0) {
