@@ -398,6 +398,7 @@
           flashTimer: 0,
           walkCycle: 0,
           jumpLock: false
+          ,crouching: false
           ,meleeTimer: 0
           ,meleeCooldown: 0
           ,meleeHitRegistered: false
@@ -431,6 +432,7 @@
         player.meleeCooldown = 0;
         player.meleeHitRegistered = false;
         player.shielding = false;
+        player.crouching = false;
         bot.x = 670;
         bot.y = WORLD.floor;
         bot.vx = 0;
@@ -735,12 +737,14 @@
       }
 
       function updatePlayer(dt) {
+        player.crouching = false;
         if (!keys.has("arrowdown") && !keys.has("a")) superMove.inputLock = false;
         if (keys.has("arrowdown") && keys.has("a") && !superMove.inputLock && player.health <= 30) {
           startUltimate();
           return;
         }
         player.shielding = keys.has("s");
+        player.crouching = player.grounded && keys.has("arrowdown") && !player.shielding;
         if (player.shielding) {
           player.vx = 0;
           return;
@@ -761,6 +765,10 @@
         if (keys.has("z")) tryMelee(player, "punch");
         if (keys.has("x")) tryMelee(player, "kick");
         if (keys.has("a") && player.attackCooldown <= 0) castSpell(player);
+      }
+
+      function isPlayerCrouching(fighter) {
+        return fighter.isPlayer && (fighter.crouching || keys.has("arrowdown"));
       }
 
       function tryMelee(fighter, type) {
@@ -965,6 +973,7 @@
         if (attacker.meleeHitRegistered) return;
         if (Math.abs(target.x - attacker.x) < 50 && Math.abs(target.y - attacker.y) < 48) {
           attacker.meleeHitRegistered = true;
+          if (isPlayerCrouching(target)) return;
           if (target.shielding) {
             playShieldSound();
             burst(target.x + target.facing * 28, target.y - 44, COLORS.mid, 10);
@@ -1015,6 +1024,7 @@
         const reach = 72;
         if (Math.abs(target.x - attacker.x) < reach && Math.abs(target.y - attacker.y) < 48) {
           attacker.hitRegistered = true;
+          if (isPlayerCrouching(target)) return;
           if (target.shielding) {
             playShieldSound();
             burst(target.x + target.facing * 28, target.y - 44, COLORS.mid, 10);
@@ -1073,6 +1083,7 @@
       }
 
       function applySyncHazardHit(fighter) {
+        if (isPlayerCrouching(fighter)) return;
         if (Math.abs(fighter.x - syncHazard.x) > syncHazard.width / 2 + fighter.width / 2) return;
         if (fighter.y < WORLD.floor - 86) return;
         fighter.health = Math.max(0, fighter.health - 15);
@@ -1090,6 +1101,10 @@
           spell.life -= dt;
           const target = spell.owner === player ? bot : player;
           if (spell.life > 0 && Math.abs(spell.x - target.x) < 34 && Math.abs(spell.y - (target.y - 50)) < 50) {
+            if (isPlayerCrouching(target)) {
+              spell.life = 0;
+              return;
+            }
             if (target.shielding) {
               burst(spell.x, spell.y, COLORS.mid, 10);
               playShieldSound();
@@ -1151,9 +1166,9 @@
         }
         drawBackdrop(currentStageId);
         drawHud();
+        drawSyncHazard();
         drawFighter(player);
         drawFighter(bot);
-        drawSyncHazard();
         drawProjectiles();
         drawParticles();
         drawUltimateEffect();
@@ -1951,6 +1966,10 @@
         ctx.save();
         ctx.translate(x, y);
         ctx.scale(fighter.facing, 1);
+        if (fighter.crouching) {
+          ctx.translate(0, 14);
+          ctx.scale(1, 0.68);
+        }
         ctx.imageSmoothingEnabled = false;
 
         ctx.fillStyle = COLORS.black;
