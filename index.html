@@ -258,6 +258,15 @@
         inputLock: false,
         speechTimer: 0
       };
+      const syncHazard = {
+        phase: "IDLE",
+        timer: 360,
+        x: 0,
+        y: -60,
+        width: 56,
+        height: 42,
+        hitRegistered: false
+      };
 
       function readStorageNumber(key, fallback) {
         try {
@@ -450,6 +459,7 @@
         finisherWinner = null;
         projectiles = [];
         particles = [];
+        resetSyncHazard();
         gameOver = false;
         statusMessage.classList.remove("visible");
         roundNumber.textContent = String(round).padStart(2, "0");
@@ -678,6 +688,7 @@
 
       function update(delta) {
         const dt = Math.min(delta / 16.67, 2);
+        screenShake = Math.max(0, screenShake - dt);
         superMove.speechTimer = Math.max(0, superMove.speechTimer - dt);
         roundBannerTimer = Math.max(0, roundBannerTimer - dt);
         koBannerTimer = Math.max(0, koBannerTimer - dt);
@@ -716,6 +727,7 @@
         updateBot(dt);
         updateFighter(player, dt);
         updateFighter(bot, dt);
+        updateSyncHazard(dt);
         updateProjectiles(dt);
         updateParticles(dt);
 
@@ -1018,6 +1030,60 @@
         if (attacker.attackTimer <= 1) attacker.hitRegistered = false;
       }
 
+      function resetSyncHazard() {
+        syncHazard.phase = "IDLE";
+        syncHazard.timer = 240 + Math.random() * 120;
+        syncHazard.x = 0;
+        syncHazard.y = -60;
+        syncHazard.hitRegistered = false;
+      }
+
+      function updateSyncHazard(dt) {
+        if (syncHazard.phase === "IDLE") {
+          syncHazard.timer -= dt;
+          if (syncHazard.timer <= 0) {
+            syncHazard.phase = "WARNING";
+            syncHazard.timer = 90;
+            syncHazard.x = 90 + Math.random() * (WORLD.width - 180);
+            syncHazard.hitRegistered = false;
+          }
+          return;
+        }
+
+        if (syncHazard.phase === "WARNING") {
+          syncHazard.timer -= dt;
+          if (syncHazard.timer <= 0) {
+            syncHazard.phase = "FALLING";
+            syncHazard.y = -syncHazard.height - 12;
+          }
+          return;
+        }
+
+        syncHazard.y += 22 * dt;
+        if (syncHazard.y + syncHazard.height < WORLD.floor) return;
+
+        syncHazard.y = WORLD.floor - syncHazard.height;
+        applySyncHazardHit(player);
+        applySyncHazardHit(bot);
+        burst(syncHazard.x, WORLD.floor - 8, COLORS.glow, 12);
+        burst(syncHazard.x, WORLD.floor - 8, COLORS.mid, 8);
+        screenShake = 3;
+        syncHazard.phase = "IDLE";
+        syncHazard.timer = 240 + Math.random() * 120;
+      }
+
+      function applySyncHazardHit(fighter) {
+        if (Math.abs(fighter.x - syncHazard.x) > syncHazard.width / 2 + fighter.width / 2) return;
+        if (fighter.y < WORLD.floor - 86) return;
+        fighter.health = Math.max(0, fighter.health - 15);
+        fighter.hurtTimer = 18;
+        fighter.flashTimer = 12;
+        fighter.vx = (fighter.x >= syncHazard.x ? 1 : -1) * 9;
+        fighter.vy = -5;
+        playHitSound();
+        burst(fighter.x, fighter.y - 48, COLORS.glow, 8);
+      }
+
       function updateProjectiles(dt) {
         projectiles.forEach((spell) => {
           spell.x += spell.vx * dt;
@@ -1087,6 +1153,7 @@
         drawHud();
         drawFighter(player);
         drawFighter(bot);
+        drawSyncHazard();
         drawProjectiles();
         drawParticles();
         drawUltimateEffect();
@@ -1990,6 +2057,37 @@
         ctx.fillRect(3, -24, 4, 3);
         ctx.fillStyle = COLORS.white;
         ctx.fillRect(-5, 0, 10, 4);
+      }
+
+      function drawSyncHazard() {
+        if (syncHazard.phase === "IDLE") return;
+
+        const centerX = Math.round(syncHazard.x);
+        if (syncHazard.phase === "WARNING") {
+          const pulse = Math.floor(syncHazard.timer / 6) % 2 === 0;
+          ctx.fillStyle = pulse ? COLORS.glow : COLORS.mid;
+          ctx.fillRect(centerX - 30, WORLD.floor - 5, 60, 5);
+          ctx.fillStyle = COLORS.black;
+          ctx.fillRect(centerX - 4, WORLD.floor - 35, 8, 22);
+          ctx.fillRect(centerX - 7, WORLD.floor - 40, 14, 6);
+          return;
+        }
+
+        const left = centerX - syncHazard.width / 2;
+        const top = Math.round(syncHazard.y);
+        ctx.fillStyle = COLORS.black;
+        ctx.fillRect(left, top + 8, syncHazard.width, syncHazard.height - 8);
+        ctx.fillRect(left + 8, top, 28, 8);
+        ctx.fillStyle = COLORS.glow;
+        ctx.fillRect(left + 4, top + 12, syncHazard.width - 8, syncHazard.height - 16);
+        ctx.fillStyle = COLORS.mid;
+        ctx.fillRect(left + 10, top + 18, syncHazard.width - 20, 6);
+        ctx.fillStyle = COLORS.ink;
+        ctx.fillRect(left + 10, top + 29, 36, 4);
+        ctx.fillRect(left + 14, top + 35, 28, 3);
+        ctx.fillStyle = COLORS.black;
+        ctx.fillRect(left + 8, top + 12, 4, 26);
+        ctx.fillRect(left + syncHazard.width - 12, top + 12, 4, 26);
       }
 
       function drawProjectiles() {
