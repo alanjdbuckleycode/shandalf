@@ -221,6 +221,41 @@
       let gameOver = false;
       let lastTime = performance.now();
       let botThink = 0;
+      let selectedOpponentIndex = 0;
+      let chosenOpponent = null;
+
+      function createSpriteImage(svg) {
+        const image = new Image();
+        image.src = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+        return image;
+      }
+
+      const opponentOptions = [
+        {
+          name: "RIPPLING BOT",
+          color: COLORS.red,
+          accent: COLORS.mid,
+          speed: 1.35,
+          health: 80,
+          sprite: null
+        },
+        {
+          name: "FACTORIAL MECH",
+          color: "#FFA300",
+          accent: COLORS.ink,
+          speed: 0.8,
+          health: 130,
+          sprite: createSpriteImage(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 90" shape-rendering="crispEdges"><path fill="#FFA300" d="M22 2h36v8h8v12h6v28H60v30H48v8H32v-8H20V50H8V22h6V10h8z"/><path fill="#1D2B53" d="M14 22h52v28H14zM20 58h40v22H20z"/><path fill="#FFCC00" d="M26 30h28v8H26zM31 60h18v12H31z"/><path fill="#1D2B53" d="M29 12h8v8h-8zM43 12h8v8h-8zM8 34h10v10H8zM62 34h10v10H62z"/></svg>`)
+        },
+        {
+          name: "HIBOB CYBORG",
+          color: "#FF77A8",
+          accent: COLORS.ink,
+          speed: 1.1,
+          health: 100,
+          sprite: createSpriteImage(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 90" shape-rendering="crispEdges"><path fill="#FF77A8" d="M20 2h40v8h8v12h6v30H60v28H48v8H32v-8H20V52H6V22h6V10h8z"/><path fill="#1D2B53" d="M14 22h52v30H14zM20 58h40v22H20z"/><path fill="#FF004D" d="M24 30h32v8H24zM31 60h18v12H31z"/><path fill="#1D2B53" d="M29 12h8v8h-8zM43 12h8v8h-8zM6 36h12v10H6zM62 36h12v10H62z"/></svg>`)
+        }
+      ];
 
       const player = createFighter({
         name: "SHANDALF",
@@ -231,13 +266,12 @@
         isPlayer: true
       });
       const bot = createFighter({
-        name: "RIPPLING BOT",
+        ...opponentOptions[0],
         x: 740,
-        color: COLORS.mid,
-        accent: COLORS.glow,
         facing: -1,
         isPlayer: false
       });
+      chosenOpponent = opponentOptions[0];
 
       function createFighter(options) {
         return {
@@ -247,7 +281,8 @@
           vy: 0,
           width: 54,
           height: 88,
-          health: 100,
+          health: options.health || 100,
+          maxHealth: options.health || 100,
           grounded: true,
           attackCooldown: 0,
           attackTimer: 0,
@@ -256,6 +291,17 @@
           walkCycle: 0,
           jumpLock: false
         };
+      }
+
+      function configureOpponent(opponent) {
+        chosenOpponent = opponent;
+        bot.name = opponent.name;
+        bot.color = opponent.color;
+        bot.accent = opponent.accent;
+        bot.speed = opponent.speed;
+        bot.maxHealth = opponent.health;
+        bot.health = opponent.health;
+        bot.sprite = opponent.sprite;
       }
 
       function resetRound() {
@@ -272,7 +318,7 @@
         bot.y = WORLD.floor;
         bot.vx = 0;
         bot.vy = 0;
-        bot.health = 100;
+        bot.health = bot.maxHealth;
         bot.grounded = true;
         bot.attackCooldown = 0;
         bot.attackTimer = 0;
@@ -287,7 +333,12 @@
       function handleKeyDown(event) {
         const key = event.key.toLowerCase();
         if (["arrowleft", "arrowright", "arrowup", "a", "s", "r", "enter", "escape"].includes(key)) event.preventDefault();
+        if (gameState === "title" && (key === "arrowleft" || key === "arrowright")) {
+          selectedOpponentIndex = (selectedOpponentIndex + (key === "arrowright" ? 1 : -1) + opponentOptions.length) % opponentOptions.length;
+          return;
+        }
         if (key === "enter" && gameState === "title") {
+          configureOpponent(opponentOptions[selectedOpponentIndex]);
           gameState = "combat";
           resetRound();
           return;
@@ -334,7 +385,7 @@
         if (player.health <= 0 || bot.health <= 0) {
           gameOver = true;
           const playerWon = bot.health <= 0;
-          statusMessage.innerHTML = `${playerWon ? "SHANDALF WINS" : "RIPPLING BOT WINS"}<br><small>Press R to rematch</small>`;
+          statusMessage.innerHTML = `${playerWon ? "SHANDALF WINS" : `${bot.name} WINS`}<br><small>Press R to rematch</small>`;
           statusMessage.classList.add("visible");
           burst(playerWon ? bot.x : player.x, WORLD.floor - 52, playerWon ? COLORS.glow : COLORS.mid, 18);
         }
@@ -361,7 +412,7 @@
         botThink -= dt;
         const distance = player.x - bot.x;
         bot.facing = distance >= 0 ? 1 : -1;
-        bot.vx = Math.abs(distance) > 112 ? bot.facing * 1.35 : 0;
+        bot.vx = Math.abs(distance) > 112 ? bot.facing * bot.speed : 0;
         if (bot.grounded && Math.abs(distance) < 170 && botThink <= 0) {
           botThink = 70 + Math.random() * 55;
           if (Math.random() > 0.35) bot.vy = -9.5;
@@ -504,16 +555,38 @@
         ctx.fillStyle = COLORS.mid;
         ctx.fillRect(290, 247, 380, 5);
 
-        drawTitleFighter(270, 410, 1, COLORS.glow, COLORS.mid);
-        drawTitleFighter(690, 410, -1, COLORS.mid, COLORS.glow);
+        drawTitleFighter(190, 410, 1, COLORS.glow, COLORS.mid);
+        drawTitleFighter(770, 410, -1, COLORS.mid, COLORS.glow);
+
+        const opponent = opponentOptions[selectedOpponentIndex];
+        ctx.fillStyle = COLORS.black;
+        ctx.fillRect(300, 278, 360, 158);
+        ctx.strokeStyle = opponent.color;
+        ctx.lineWidth = 4;
+        ctx.strokeRect(300, 278, 360, 158);
+        ctx.fillStyle = COLORS.white;
+        ctx.font = "bold 13px Courier New, monospace";
+        ctx.fillText("SELECT RIVAL", WORLD.width / 2, 300);
+        ctx.fillStyle = opponent.color;
+        ctx.font = "bold 22px Courier New, monospace";
+        ctx.fillText("<", 322, 370);
+        ctx.fillText(">", 638, 370);
+        ctx.font = "bold 16px Courier New, monospace";
+        ctx.fillText(opponent.name, WORLD.width / 2, 326);
+        drawTitleOpponent(opponent, WORLD.width / 2, 390);
+        ctx.fillStyle = opponent.color;
+        ctx.fillRect(450, 420, 60, 6);
+        ctx.fillStyle = COLORS.mid;
+        ctx.font = "10px Courier New, monospace";
+        ctx.fillText("LEFT / RIGHT TO CHOOSE", WORLD.width / 2, 450);
 
         ctx.fillStyle = COLORS.glow;
-        ctx.font = "bold 15px Courier New, monospace";
-        ctx.fillText("ARROW KEYS: MOVE/JUMP  |  A: ATTACK  |  S: SHIELD", WORLD.width / 2, 305);
+        ctx.font = "bold 13px Courier New, monospace";
+        ctx.fillText("ARROW KEYS: MOVE/JUMP  |  A: ATTACK  |  S: SHIELD", WORLD.width / 2, 474);
         if (Math.floor(performance.now() / 450) % 2 === 0) {
           ctx.fillStyle = COLORS.glow;
-          ctx.font = "bold 22px Courier New, monospace";
-          ctx.fillText("PRESS ENTER TO START", WORLD.width / 2, 475);
+          ctx.font = "bold 18px Courier New, monospace";
+          ctx.fillText("PRESS ENTER TO START", WORLD.width / 2, 510);
         }
         ctx.textAlign = "left";
       }
@@ -540,6 +613,14 @@
         ctx.fillRect(27, -62, 5, 62);
         ctx.fillRect(24, -67, 11, 5);
         ctx.restore();
+      }
+
+      function drawTitleOpponent(opponent, x, y) {
+        if (opponent.sprite && opponent.sprite.complete) {
+          ctx.drawImage(opponent.sprite, x - 42, y - 48, 84, 96);
+          return;
+        }
+        drawTitleFighter(x, y, 1, opponent.color, opponent.accent);
       }
 
       function drawBackdrop() {
@@ -594,7 +675,8 @@
 
       function drawHud() {
         drawHealthBar(38, 49, 330, player.health, player.name, true);
-        drawHealthBar(592, 49, 330, bot.health, bot.name, false);
+        drawHealthBar(592, 49, 330, bot.health, bot.name, false, bot.maxHealth, bot.color);
+        drawOpponentAvatar(bot);
         ctx.fillStyle = COLORS.mid;
         ctx.font = "bold 16px Courier New, monospace";
         ctx.textAlign = "center";
@@ -602,17 +684,17 @@
         ctx.textAlign = "left";
       }
 
-      function drawHealthBar(x, y, width, health, label, isPlayer) {
-        ctx.fillStyle = COLORS.mid;
+      function drawHealthBar(x, y, width, health, label, isPlayer, maxHealth = 100, barColor = COLORS.mid) {
+        ctx.fillStyle = barColor;
         ctx.font = "bold 12px Courier New, monospace";
         ctx.textAlign = isPlayer ? "left" : "right";
         ctx.fillText(label, isPlayer ? x : x + width, y - 10);
         ctx.fillStyle = COLORS.deep;
         ctx.fillRect(x, y, width, 22);
-        ctx.fillStyle = health > 35 ? COLORS.glow : COLORS.mid;
-        const fillWidth = Math.max(0, width * health / 100);
+        ctx.fillStyle = health > maxHealth * 0.35 ? barColor : COLORS.red;
+        const fillWidth = Math.max(0, width * health / maxHealth);
         ctx.fillRect(isPlayer ? x : x + width - fillWidth, y, fillWidth, 22);
-        ctx.strokeStyle = COLORS.mid;
+        ctx.strokeStyle = barColor;
         ctx.lineWidth = 3;
         ctx.strokeRect(x, y, width, 22);
         ctx.fillStyle = COLORS.ink;
@@ -620,6 +702,23 @@
         ctx.textAlign = isPlayer ? "left" : "right";
         ctx.fillText(`${Math.ceil(health)} HP`, isPlayer ? x + 8 : x + width - 8, y + 15);
         ctx.textAlign = "left";
+      }
+
+      function drawOpponentAvatar(fighter) {
+        ctx.fillStyle = COLORS.black;
+        ctx.fillRect(548, 42, 34, 38);
+        ctx.strokeStyle = fighter.color;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(548, 42, 34, 38);
+        if (fighter.sprite && fighter.sprite.complete) {
+          ctx.drawImage(fighter.sprite, 551, 44, 28, 33);
+        } else {
+          ctx.save();
+          ctx.translate(565, 75);
+          ctx.scale(0.38, 0.38);
+          drawBotBody(fighter.color, fighter.accent, 0);
+          ctx.restore();
+        }
       }
 
       function drawFighter(fighter) {
@@ -639,6 +738,7 @@
         ctx.fillRect(-17, 5, 34, 5);
 
         if (fighter.isPlayer) drawWizardBody(primary, secondary, step);
+        else if (fighter.sprite && fighter.sprite.complete) ctx.drawImage(fighter.sprite, -40, -84, 80, 84);
         else drawBotBody(primary, secondary, step);
 
         if (fighter.attackTimer > 0) {
@@ -680,25 +780,6 @@
         ctx.fillRect(27, -63, 6, 3);
         ctx.fillStyle = COLORS.white;
         ctx.fillRect(-10, -13, 20, 5);
-      }
-
-      function drawOldWizardBody(primary, secondary, step) {
-        ctx.fillStyle = secondary;
-        ctx.fillRect(-21, -3, 42, 11);
-        ctx.fillRect(-17, 8, 34, 12);
-        ctx.fillStyle = primary;
-        ctx.fillRect(-14, 20, 10, 19 + step);
-        ctx.fillRect(5, 20, 10, 19 - step);
-        ctx.fillStyle = COLORS.ink;
-        ctx.fillRect(-19, 39 + step, 15, 5);
-        ctx.fillRect(4, 39 - step, 15, 5);
-        ctx.fillStyle = secondary;
-        ctx.fillRect(18, 4, 10, 7);
-        ctx.fillRect(-29, 4, 10, 7);
-        ctx.fillStyle = COLORS.mid;
-        ctx.fillRect(28, -49, 4, 48);
-        ctx.fillRect(25, -52, 10, 5);
-        ctx.fillRect(28, -57, 4, 5);
       }
 
       function drawBotBody(primary, secondary, step) {
