@@ -223,6 +223,13 @@
       let botThink = 0;
       let selectedOpponentIndex = 0;
       let chosenOpponent = null;
+      let screenShake = 0;
+      const superMove = {
+        active: false,
+        timer: 0,
+        damageApplied: false,
+        inputLock: false
+      };
 
       function createSpriteImage(svg) {
         const image = new Image();
@@ -323,6 +330,11 @@
         bot.attackCooldown = 0;
         bot.attackTimer = 0;
         bot.hurtTimer = 0;
+        superMove.active = false;
+        superMove.timer = 0;
+        superMove.damageApplied = false;
+        superMove.inputLock = false;
+        screenShake = 0;
         projectiles = [];
         particles = [];
         gameOver = false;
@@ -332,7 +344,7 @@
 
       function handleKeyDown(event) {
         const key = event.key.toLowerCase();
-        if (["arrowleft", "arrowright", "arrowup", "a", "s", "r", "enter", "escape"].includes(key)) event.preventDefault();
+        if (["arrowleft", "arrowright", "arrowup", "arrowdown", "a", "s", "r", "enter", "escape"].includes(key)) event.preventDefault();
         if (gameState === "title" && (key === "arrowleft" || key === "arrowright")) {
           selectedOpponentIndex = (selectedOpponentIndex + (key === "arrowright" ? 1 : -1) + opponentOptions.length) % opponentOptions.length;
           return;
@@ -375,6 +387,12 @@
           return;
         }
 
+        if (superMove.active) {
+          updateUltimate(dt);
+          updateParticles(dt);
+          return;
+        }
+
         updatePlayer(dt);
         updateBot(dt);
         updateFighter(player, dt);
@@ -382,17 +400,16 @@
         updateProjectiles(dt);
         updateParticles(dt);
 
-        if (player.health <= 0 || bot.health <= 0) {
-          gameOver = true;
-          const playerWon = bot.health <= 0;
-          statusMessage.innerHTML = `${playerWon ? "SHANDALF WINS" : `${bot.name} WINS`}<br><small>Press R to rematch</small>`;
-          statusMessage.classList.add("visible");
-          burst(playerWon ? bot.x : player.x, WORLD.floor - 52, playerWon ? COLORS.glow : COLORS.mid, 18);
-        }
+        endRoundIfNeeded();
       }
 
       function updatePlayer(dt) {
         if (player.hurtTimer > 0) return;
+        if (!keys.has("arrowdown") && !keys.has("a")) superMove.inputLock = false;
+        if (keys.has("arrowdown") && keys.has("a") && !superMove.inputLock && player.health <= 30) {
+          startUltimate();
+          return;
+        }
         const left = keys.has("arrowleft");
         const right = keys.has("arrowright");
         player.vx = (right ? 3.5 : 0) + (left ? -3.5 : 0);
@@ -405,6 +422,64 @@
         }
         if (!keys.has("arrowup")) player.jumpLock = false;
         if (keys.has("a") && player.attackCooldown <= 0) castSpell(player);
+      }
+
+      function startUltimate() {
+        superMove.active = true;
+        superMove.timer = 0;
+        superMove.damageApplied = false;
+        superMove.inputLock = true;
+        player.vx = 0;
+        player.vy = 0;
+        player.attackTimer = 18;
+        player.attackCooldown = 999;
+        bot.vx = 0;
+        bot.vy = 0;
+        bot.attackTimer = 0;
+        burst(player.x + player.facing * 28, player.y - 58, COLORS.green, 18);
+        screenShake = 2;
+      }
+
+      function updateUltimate(dt) {
+        superMove.timer += dt;
+        const timer = superMove.timer;
+        screenShake = timer < 14 ? 3 : timer < 43 ? 1 : timer < 57 ? 5 : timer < 65 ? 7 : 2;
+        if (timer >= 14 && timer - dt < 14) {
+          burst(player.x, WORLD.floor - 6, COLORS.mid, 24);
+          burst(player.x, WORLD.floor - 6, COLORS.glow, 12);
+        }
+        if (timer >= 29 && timer < 43 && Math.random() > 0.35) {
+          burst(player.x + (Math.random() - 0.5) * 70, player.y - 58, COLORS.white, 3);
+        }
+        if (timer >= 43 && !superMove.damageApplied) {
+          superMove.damageApplied = true;
+          bot.health = Math.max(0, bot.health - 55);
+          bot.hurtTimer = 26;
+          bot.flashTimer = 26;
+          bot.vx = player.facing * 13;
+          bot.vy = -8;
+          burst(bot.x, bot.y - 50, COLORS.white, 30);
+          burst(bot.x, bot.y - 50, bot.color, 24);
+        }
+        if (timer >= 43 && timer < 58 && Math.random() > 0.25) {
+          burst(Math.random() * WORLD.width, player.y - 50 + (Math.random() - 0.5) * 80, COLORS.glow, 2);
+        }
+        if (timer >= 72) {
+          superMove.active = false;
+          player.attackCooldown = 34;
+          screenShake = 0;
+          endRoundIfNeeded();
+        }
+      }
+
+      function endRoundIfNeeded() {
+        if (player.health <= 0 || bot.health <= 0) {
+          gameOver = true;
+          const playerWon = bot.health <= 0;
+          statusMessage.innerHTML = `${playerWon ? "SHANDALF WINS" : `${bot.name} WINS`}<br><small>Press R to rematch</small>`;
+          statusMessage.classList.add("visible");
+          burst(playerWon ? bot.x : player.x, WORLD.floor - 52, playerWon ? COLORS.glow : COLORS.mid, 18);
+        }
       }
 
       function updateBot(dt) {
@@ -523,12 +598,85 @@
           drawParticles();
           return;
         }
+        ctx.save();
+        if (screenShake > 0) {
+          ctx.translate(Math.round((Math.random() - 0.5) * screenShake * 2), Math.round((Math.random() - 0.5) * screenShake * 2));
+        }
         drawBackdrop();
         drawHud();
         drawFighter(player);
         drawFighter(bot);
         drawProjectiles();
         drawParticles();
+        drawUltimateEffect();
+        ctx.restore();
+      }
+
+      function drawUltimateEffect() {
+        if (!superMove.active) return;
+        const timer = superMove.timer;
+        const beamY = player.y - 58;
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+
+        if (timer >= 14 && timer < 43) {
+          ctx.fillStyle = "rgba(15, 16, 33, 0.42)";
+          ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+          ctx.strokeStyle = COLORS.mid;
+          ctx.lineWidth = 4;
+          ctx.strokeRect(bot.x - 48, bot.y - 96, 96, 100);
+          ctx.fillStyle = COLORS.white;
+          ctx.font = "bold 11px Courier New, monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("NO PASSING ZONE", bot.x, bot.y - 106);
+          for (let y = bot.y - 92; y < bot.y - 2; y += 12) {
+            ctx.fillStyle = y % 24 === 0 ? COLORS.white : COLORS.mid;
+            ctx.fillRect(bot.x - 44, y, 5, 5);
+            ctx.fillRect(bot.x + 39, y, 5, 5);
+          }
+        }
+
+        if (timer < 43) {
+          const pulse = 12 + Math.floor(timer / 3) % 3 * 4;
+          ctx.fillStyle = COLORS.green;
+          ctx.fillRect(player.x + player.facing * 24 - pulse / 2, beamY - pulse / 2, pulse, pulse);
+          ctx.fillStyle = COLORS.white;
+          ctx.fillRect(player.x + player.facing * 24 - 4, beamY - 4, 8, 8);
+        }
+
+        if (timer >= 8 && timer < 24) {
+          ctx.fillStyle = COLORS.mid;
+          ctx.fillRect(player.x - 62, WORLD.floor - 8, 124, 5);
+          ctx.fillStyle = COLORS.glow;
+          ctx.fillRect(player.x - 34, WORLD.floor - 14, 68, 5);
+        }
+
+        if (timer >= 39 && timer < 60) {
+          const beamWidth = timer < 43 ? (timer - 39) * 110 : WORLD.width;
+          ctx.fillStyle = COLORS.green;
+          ctx.fillRect(0, beamY - 25, beamWidth, 50);
+          ctx.fillStyle = COLORS.glow;
+          ctx.fillRect(0, beamY - 17, beamWidth, 34);
+          ctx.fillStyle = COLORS.white;
+          ctx.fillRect(0, beamY - 8, beamWidth, 16);
+          ctx.fillStyle = COLORS.mid;
+          for (let x = 0; x < beamWidth; x += 32) ctx.fillRect(x, beamY - 30 + (x % 3) * 8, 16, 6);
+          ctx.fillStyle = COLORS.green;
+          for (let x = 12; x < beamWidth; x += 47) ctx.fillRect(x, beamY + 24 - (x % 4) * 5, 9, 9);
+        }
+
+        if (timer >= 43 && timer < 66) {
+          ctx.fillStyle = COLORS.glow;
+          ctx.font = "bold 28px Courier New, monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("YOU SHALL NOT PASS!", WORLD.width / 2, 170);
+          ctx.fillStyle = COLORS.white;
+          ctx.font = "bold 13px Courier New, monospace";
+          ctx.fillText("PASSED?  NO.", WORLD.width / 2, 198);
+        }
+
+        ctx.textAlign = "left";
+        ctx.restore();
       }
 
       function drawTitleScreen() {
@@ -583,6 +731,9 @@
         ctx.fillStyle = COLORS.glow;
         ctx.font = "bold 13px Courier New, monospace";
         ctx.fillText("ARROW KEYS: MOVE/JUMP  |  A: ATTACK  |  S: SHIELD", WORLD.width / 2, 474);
+        ctx.fillStyle = COLORS.green;
+        ctx.font = "bold 10px Courier New, monospace";
+        ctx.fillText("DOWN + A: YOU SHALL NOT PASS!  (UNDER 30% HP)", WORLD.width / 2, 492);
         if (Math.floor(performance.now() / 450) % 2 === 0) {
           ctx.fillStyle = COLORS.glow;
           ctx.font = "bold 18px Courier New, monospace";
