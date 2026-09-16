@@ -182,7 +182,9 @@
         <div class="key-list">
           <span><kbd>←</kbd><kbd>→</kbd> Move</span>
           <span><kbd>↑</kbd> Jump</span>
-          <span><kbd>A</kbd> Attack</span>
+          <span><kbd>A</kbd> Magic</span>
+          <span><kbd>Z</kbd> Punch</span>
+          <span><kbd>X</kbd> Kick</span>
           <span><kbd>S</kbd> Shield</span>
         </div>
         <div class="tip">Land the spell. Keep your distance.</div>
@@ -210,7 +212,8 @@
         red: "#FF004D",
         blueDark: "#1D5B8F",
         purple: "#AB3472",
-        black: "#0F1021"
+        black: "#0F1021",
+        arenaLight: "#BEC6CF"
       };
       const WORLD = { width: 960, height: 540, floor: 442 };
       const keys = new Set();
@@ -338,6 +341,11 @@
           flashTimer: 0,
           walkCycle: 0,
           jumpLock: false
+          ,meleeTimer: 0
+          ,meleeCooldown: 0
+          ,meleeHitRegistered: false
+          ,meleeType: "punch"
+          ,shielding: false
         };
       }
 
@@ -362,6 +370,10 @@
         player.attackCooldown = 0;
         player.attackTimer = 0;
         player.hurtTimer = 0;
+        player.meleeTimer = 0;
+        player.meleeCooldown = 0;
+        player.meleeHitRegistered = false;
+        player.shielding = false;
         bot.x = 740;
         bot.y = WORLD.floor;
         bot.vx = 0;
@@ -371,6 +383,10 @@
         bot.attackCooldown = 0;
         bot.attackTimer = 0;
         bot.hurtTimer = 0;
+        bot.meleeTimer = 0;
+        bot.meleeCooldown = 0;
+        bot.meleeHitRegistered = false;
+        bot.shielding = false;
         superMove.active = false;
         superMove.timer = 0;
         superMove.damageApplied = false;
@@ -401,7 +417,7 @@
 
       function handleKeyDown(event) {
         const key = event.key.toLowerCase();
-        if (["arrowleft", "arrowright", "arrowup", "arrowdown", "a", "d", "s", "r", "enter", " ", "escape"].includes(key)) event.preventDefault();
+        if (["arrowleft", "arrowright", "arrowup", "arrowdown", "a", "d", "s", "x", "z", "r", "enter", " ", "escape"].includes(key)) event.preventDefault();
         if (gameState === "STAGE_SELECT" && ["arrowleft", "arrowright", "a", "d"].includes(key)) {
           const movesRight = key === "arrowright" || key === "d";
           selectedStageIndex = (selectedStageIndex + (movesRight ? 1 : -1) + stages.length) % stages.length;
@@ -437,7 +453,7 @@
           statusMessage.classList.remove("visible");
           return;
         }
-        if (key === "s" && gameState === "combat") playShieldSound();
+        if (key === "s" && gameState === "combat" && !keys.has("s")) playShieldSound();
         keys.add(key);
         if (key === "r" && gameOver) {
           gameState = "STAGE_SELECT";
@@ -577,6 +593,11 @@
         tone(880, 0.18, "sawtooth", 0.045, 180, 0);
       }
 
+      function playMeleeSound() {
+        tone(115, 0.09, "triangle", 0.08, 70, 0);
+        tone(75, 0.07, "square", 0.035, 45, 0.025);
+      }
+
       function playShieldSound() {
         tone(180, 0.16, "triangle", 0.07, 75, 0);
         tone(420, 0.08, "square", 0.035, 180, 0.02);
@@ -643,6 +664,11 @@
           startUltimate();
           return;
         }
+        player.shielding = keys.has("s");
+        if (player.shielding) {
+          player.vx = 0;
+          return;
+        }
         if (player.hurtTimer > 0) return;
         const left = keys.has("arrowleft");
         const right = keys.has("arrowright");
@@ -656,7 +682,19 @@
           burst(player.x, player.y, COLORS.mid, 5);
         }
         if (!keys.has("arrowup")) player.jumpLock = false;
+        if (keys.has("z")) tryMelee(player, "punch");
+        if (keys.has("x")) tryMelee(player, "kick");
         if (keys.has("a") && player.attackCooldown <= 0) castSpell(player);
+      }
+
+      function tryMelee(fighter, type) {
+        if (fighter.meleeCooldown > 0 || fighter.hurtTimer > 0) return;
+        fighter.meleeTimer = 6;
+        fighter.meleeCooldown = 28;
+        fighter.meleeHitRegistered = false;
+        fighter.meleeType = type;
+        playMeleeSound();
+        burst(fighter.x + fighter.facing * 38, fighter.y - 32, COLORS.glow, 4);
       }
 
       function startUltimate() {
@@ -678,7 +716,15 @@
       }
 
       function speakUltimateLine() {
-        speakWizardLine("You shall not pass!");
+        if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) return;
+        window.speechSynthesis.cancel();
+        const line = new SpeechSynthesisUtterance("You shall not pass!");
+        line.rate = 0.72;
+        line.pitch = 0.65;
+        line.volume = 1;
+        const voice = chooseWizardVoice();
+        if (voice) line.voice = voice;
+        window.speechSynthesis.speak(line);
       }
 
       function updateUltimate(dt) {
@@ -761,6 +807,7 @@
 
       function updateBot(dt) {
         if (bot.hurtTimer > 0) return;
+        bot.shielding = false;
         botThink -= dt;
         const distance = player.x - bot.x;
         bot.facing = distance >= 0 ? 1 : -1;
@@ -772,11 +819,16 @@
         if (Math.abs(distance) < 150 && bot.attackCooldown <= 0 && Math.random() > 0.5) {
           bot.attackTimer = 13;
           bot.attackCooldown = 52;
+        } else if (Math.abs(distance) < 560 && bot.attackCooldown <= 0 && Math.random() > 0.35) {
+          castBotBlast(bot);
         }
       }
 
       function updateFighter(fighter, dt) {
         fighter.attackCooldown = Math.max(0, fighter.attackCooldown - dt);
+        fighter.meleeCooldown = Math.max(0, fighter.meleeCooldown - dt);
+        fighter.meleeTimer = Math.max(0, fighter.meleeTimer - dt);
+        if (fighter.meleeTimer === 0) fighter.meleeHitRegistered = false;
         fighter.attackTimer = Math.max(0, fighter.attackTimer - dt);
         if (fighter.attackTimer === 0) fighter.hitRegistered = false;
         fighter.hurtTimer = Math.max(0, fighter.hurtTimer - dt);
@@ -796,6 +848,26 @@
         fighter.x = Math.max(55, Math.min(WORLD.width - 55, fighter.x));
         if (fighter.isPlayer && fighter.attackTimer > 0) resolveStaffHit(fighter, bot);
         if (!fighter.isPlayer && fighter.attackTimer > 0) resolveStaffHit(fighter, player);
+        if (fighter.isPlayer && fighter.meleeTimer > 0) resolveMeleeHit(fighter, bot);
+        if (!fighter.isPlayer && fighter.meleeTimer > 0) resolveMeleeHit(fighter, player);
+      }
+
+      function resolveMeleeHit(attacker, target) {
+        if (attacker.meleeHitRegistered) return;
+        if (Math.abs(target.x - attacker.x) < 50 && Math.abs(target.y - attacker.y) < 48) {
+          attacker.meleeHitRegistered = true;
+          if (target.shielding) {
+            playShieldSound();
+            burst(target.x + target.facing * 28, target.y - 44, COLORS.mid, 10);
+            return;
+          }
+          target.health = Math.max(0, target.health - 10);
+          target.hurtTimer = 12;
+          target.flashTimer = 8;
+          target.vx = attacker.facing * 5;
+          playHitSound();
+          burst(target.x, target.y - 48, COLORS.glow, 6);
+        }
       }
 
       function castSpell(caster) {
@@ -813,11 +885,32 @@
         burst(caster.x + caster.facing * 31, caster.y - 56, COLORS.glow, 6);
       }
 
+      function castBotBlast(caster) {
+        caster.attackCooldown = 70;
+        caster.attackTimer = 10;
+        projectiles.push({
+          x: caster.x + caster.facing * 32,
+          y: caster.y - 56,
+          vx: caster.facing * 5.5,
+          radius: 8,
+          life: 110,
+          owner: caster,
+          damage: 8,
+          color: caster.color
+        });
+        burst(caster.x + caster.facing * 31, caster.y - 56, caster.color, 5);
+      }
+
       function resolveStaffHit(attacker, target) {
         if (attacker.hitRegistered || attacker.attackTimer > 7) return;
         const reach = 72;
         if (Math.abs(target.x - attacker.x) < reach && Math.abs(target.y - attacker.y) < 48) {
           attacker.hitRegistered = true;
+          if (target.shielding) {
+            playShieldSound();
+            burst(target.x + target.facing * 28, target.y - 44, COLORS.mid, 10);
+            return;
+          }
           target.health = Math.max(0, target.health - 8);
           playHitSound();
           target.hurtTimer = 12;
@@ -834,7 +927,13 @@
           spell.life -= dt;
           const target = spell.owner === player ? bot : player;
           if (spell.life > 0 && Math.abs(spell.x - target.x) < 34 && Math.abs(spell.y - (target.y - 50)) < 50) {
-            target.health = Math.max(0, target.health - 14);
+            if (target.shielding) {
+              burst(spell.x, spell.y, COLORS.mid, 10);
+              playShieldSound();
+              spell.life = 0;
+              return;
+            }
+            target.health = Math.max(0, target.health - (spell.damage || 14));
             playHitSound();
             target.hurtTimer = 16;
             target.flashTimer = 10;
@@ -1046,7 +1145,7 @@
           ctx.fillStyle = COLORS.green;
           ctx.fillRect(x + 143, y + 12, 16, 16);
         } else if (stageId === "office") {
-          ctx.fillStyle = COLORS.white;
+          ctx.fillStyle = COLORS.arenaLight;
           ctx.fillRect(x + 28, y + 20, 120, 58);
           ctx.fillRect(x + 184, y + 20, 120, 58);
           ctx.fillStyle = COLORS.mid;
@@ -1059,7 +1158,7 @@
           ctx.fillRect(x + 48, y + 43, 68, 5);
           ctx.fillRect(x + 204, y + 43, 68, 5);
         } else if (stageId === "cloud") {
-          ctx.fillStyle = COLORS.white;
+          ctx.fillStyle = COLORS.arenaLight;
           ctx.fillRect(x + 45, y + 42, 90, 24);
           ctx.fillRect(x + 75, y + 27, 50, 39);
           ctx.fillRect(x + 210, y + 58, 86, 22);
@@ -1135,7 +1234,7 @@
 
         ctx.fillStyle = COLORS.glow;
         ctx.font = "bold 13px Courier New, monospace";
-        ctx.fillText("ARROW KEYS: MOVE/JUMP  |  A: ATTACK  |  S: SHIELD", WORLD.width / 2, 474);
+        ctx.fillText("ARROW KEYS: MOVE/JUMP  |  A: MAGIC  |  Z: PUNCH  X: KICK  |  S: SHIELD", WORLD.width / 2, 474);
         ctx.fillStyle = COLORS.green;
         ctx.font = "bold 10px Courier New, monospace";
         ctx.fillText("DOWN + A: YOU SHALL NOT PASS!  (UNDER 30% HP)", WORLD.width / 2, 492);
@@ -1232,7 +1331,7 @@
         ctx.fillRect(110, 134, 8, 200);
         ctx.fillRect(510, 134, 8, 200);
         ctx.fillRect(840, 134, 8, 200);
-        ctx.fillStyle = COLORS.white;
+        ctx.fillStyle = COLORS.arenaLight;
         ctx.fillRect(150, 158, 250, 112);
         ctx.fillRect(570, 158, 210, 112);
         ctx.fillStyle = COLORS.mid;
@@ -1257,7 +1356,7 @@
         ctx.fillStyle = COLORS.deep;
         ctx.fillRect(425, 360, 58, 40);
         ctx.fillRect(710, 360, 58, 40);
-        ctx.fillStyle = COLORS.white;
+        ctx.fillStyle = COLORS.arenaLight;
         ctx.fillRect(432, 350, 44, 20);
         ctx.fillRect(717, 350, 44, 20);
         ctx.fillStyle = COLORS.glow;
@@ -1293,20 +1392,20 @@
         ctx.fillStyle = COLORS.deep;
         ctx.fillRect(750, 300, 8, 120);
         ctx.fillRect(730, 300, 48, 28);
-        ctx.fillStyle = COLORS.white;
+        ctx.fillStyle = COLORS.arenaLight;
         ctx.font = "9px Courier New, monospace";
         ctx.fillText("CLOUD", 738, 318);
       }
 
       function drawPixelCloud(x, y, width, height) {
-        ctx.fillStyle = COLORS.white;
+        ctx.fillStyle = COLORS.arenaLight;
         ctx.fillRect(x, y + height / 3, width, height * 0.66);
         ctx.fillRect(x + width * 0.18, y, width * 0.38, height);
         ctx.fillRect(x + width * 0.5, y + height * 0.18, width * 0.32, height * 0.82);
       }
 
       function drawSlackChannel() {
-        ctx.fillStyle = COLORS.black;
+        ctx.fillStyle = COLORS.arenaLight;
         ctx.fillRect(0, 0, WORLD.width, WORLD.floor);
         ctx.fillStyle = COLORS.deep;
         ctx.fillRect(0, 0, WORLD.width, 48);
@@ -1323,7 +1422,7 @@
         ctx.fillText("09:41  @channel:", 230, 112);
         ctx.fillText("10:02  @gandalf:", 230, 205);
         ctx.fillText("10:03  @bot:", 230, 298);
-        ctx.fillStyle = COLORS.white;
+        ctx.fillStyle = COLORS.ink;
         ctx.font = "bold 15px Courier New, monospace";
         ctx.fillText("Who broke build?", 230, 140);
         ctx.fillText("I shall investigate.", 230, 233);
@@ -1495,9 +1594,40 @@
         ctx.fillRect(-27, -2, 54, 7);
         ctx.fillRect(-17, 5, 34, 5);
 
-        if (fighter.isPlayer) drawWizardBody(primary, secondary, step);
+        if (fighter.isPlayer) drawWizardBody(primary, secondary, step, fighter);
         else if (fighter.sprite && fighter.sprite.complete) ctx.drawImage(fighter.sprite, -40, -84, 80, 84);
         else drawBotBody(primary, secondary, step);
+
+        if (fighter.meleeTimer > 0) {
+          ctx.fillStyle = primary;
+          if (fighter.meleeType === "kick") {
+            ctx.fillStyle = COLORS.blueDark;
+            ctx.fillRect(5, 19, 12, 22);
+            ctx.fillStyle = primary;
+            ctx.fillRect(12, 21, 38, 9);
+            ctx.fillRect(43, 18, 12, 8);
+            ctx.fillStyle = COLORS.glow;
+            ctx.fillRect(51, 16, 7, 5);
+          } else {
+            ctx.fillStyle = COLORS.blueDark;
+            ctx.fillRect(18, 3, 11, 11);
+            ctx.fillStyle = primary;
+            ctx.fillRect(18, -5, 28, 8);
+            ctx.fillRect(41, -9, 9, 7);
+            ctx.fillStyle = COLORS.glow;
+            ctx.fillRect(47, -10, 6, 5);
+          }
+        }
+
+        if (fighter.shielding) {
+          ctx.strokeStyle = COLORS.mid;
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.arc(fighter.facing * 28, -38, 34, -Math.PI * 0.62, Math.PI * 0.62);
+          ctx.stroke();
+          ctx.fillStyle = COLORS.white;
+          ctx.fillRect(fighter.facing * 47 - 3, -42, 6, 8);
+        }
 
         if (fighter.attackTimer > 0) {
           ctx.fillStyle = COLORS.glow;
@@ -1508,7 +1638,7 @@
         ctx.restore();
       }
 
-      function drawWizardBody(primary, secondary, step) {
+      function drawWizardBody(primary, secondary, step, fighter) {
         ctx.fillStyle = COLORS.blueDark;
         ctx.fillRect(-18, -38, 36, 8);
         ctx.fillStyle = COLORS.white;
@@ -1521,12 +1651,17 @@
         ctx.fillStyle = COLORS.blueDark;
         ctx.fillRect(-21, -3, 42, 11);
         ctx.fillRect(-17, 8, 34, 12);
+        ctx.fillStyle = COLORS.deep;
+        ctx.fillRect(-17, 18, 34, 5);
         ctx.fillStyle = COLORS.mid;
+        ctx.fillRect(-20, 4, 8, 10);
+        ctx.fillRect(12, 4, 8, 10);
+        ctx.fillStyle = COLORS.mid;
+        if (fighter.meleeTimer <= 0 || fighter.meleeType !== "kick") ctx.fillRect(5, 20, 10, 19 - step);
         ctx.fillRect(-14, 20, 10, 19 + step);
-        ctx.fillRect(5, 20, 10, 19 - step);
         ctx.fillStyle = COLORS.black;
         ctx.fillRect(-19, 39 + step, 15, 5);
-        ctx.fillRect(4, 39 - step, 15, 5);
+        if (fighter.meleeTimer <= 0 || fighter.meleeType !== "kick") ctx.fillRect(4, 39 - step, 15, 5);
         ctx.fillStyle = COLORS.blueDark;
         ctx.fillRect(18, 4, 10, 7);
         ctx.fillRect(-29, 4, 10, 7);
@@ -1567,9 +1702,9 @@
 
       function drawProjectiles() {
         projectiles.forEach((spell) => {
-          ctx.fillStyle = COLORS.mid;
+          ctx.fillStyle = spell.color || COLORS.mid;
           ctx.fillRect(Math.round(spell.x - 12), Math.round(spell.y - 4), 24, 8);
-          ctx.fillStyle = COLORS.glow;
+          ctx.fillStyle = spell.color || COLORS.glow;
           ctx.fillRect(Math.round(spell.x - 7), Math.round(spell.y - 9), 14, 18);
           ctx.fillStyle = COLORS.ink;
           ctx.fillRect(Math.round(spell.x - 3), Math.round(spell.y - 3), 6, 6);
